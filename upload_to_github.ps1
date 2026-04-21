@@ -1,10 +1,5 @@
 # PowerShell Script to Upload Project to GitHub
 
-# --- CONFIGURATION ---
-$RepoUrl = "https://github.com/smartpathtechsolution-hash/-Smart-Nutrition-Fitness-Chatbot.git"
-$UserEmail = "smartpathtechsolution@gmail.com"
-$UserName = "SmartPath Tech Solution"
-# ---------------------
 
 Clear-Host
 Write-Host "==============================================" -ForegroundColor Yellow
