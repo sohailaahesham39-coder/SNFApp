@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,7 +9,7 @@ import { isValidEmail } from '../../lib/authValidation';
 import FirebaseGoogleSignIn from '../../components/auth/FirebaseGoogleSignIn';
 import { signInWithOAuthProvider } from '../../lib/oauth';
 import { getFirebaseAuth, isFirebaseConfigured } from '../../lib/firebaseApp';
-import { findProfileByEmail, upsertProfileRow } from '../../lib/authProfileSync';
+import { upsertProfileRow } from '../../lib/authProfileSync';
 import { migrateLocalDataToSupabaseAndCleanup } from '../../lib/localToSupabaseMigration';
 
 export default function Register() {
@@ -32,18 +32,30 @@ export default function Register() {
     try {
       const normalizedEmail = email.trim().toLowerCase();
 
-      const existingProfile = await findProfileByEmail(normalizedEmail);
-      if (existingProfile) {
-        setError('This email is already registered. Please login.');
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', normalizedEmail)
+        .single();
+      if (existingUser) {
+        const msg = 'This email is already registered. Please login instead.';
+        setError(msg);
+        Alert.alert('Error', msg);
         return;
       }
 
       if (isFirebaseConfigured()) {
-        const auth = getFirebaseAuth();
-        const methods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
-        if (methods.length > 0) {
-          setError('This email is already registered. Please login.');
-          return;
+        try {
+          const auth = getFirebaseAuth();
+          const methods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
+          if (methods.length > 0) {
+            const msg = 'This email is already registered.';
+            setError(msg);
+            Alert.alert('Error', msg);
+            return;
+          }
+        } catch {
+          // Email not found in Firebase, continue with registration.
         }
       }
 
@@ -56,7 +68,7 @@ export default function Register() {
       if (signUpError) {
         const msg = (signUpError.message || '').toLowerCase();
         if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
-          setError('This email is already registered. Please log in.');
+          setError('This email is already registered. Please login instead.');
         } else {
           setError(signUpError.message || 'Sign up failed');
         }
@@ -99,7 +111,7 @@ export default function Register() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unexpected error. Please try again.';
       if (msg.toLowerCase().includes('already')) {
-        setError('This email is already registered. Please login.');
+        setError('This email is already registered. Please login instead.');
       } else {
         setError(msg);
       }
@@ -181,7 +193,7 @@ export default function Register() {
           </View>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-            <Text style={s.sw}>Have an account? <Text style={s.lnk}>Sign in</Text></Text>
+            <Text style={s.sw}>Already have an account? <Text style={s.lnk}>Login</Text></Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

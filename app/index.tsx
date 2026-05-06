@@ -7,6 +7,10 @@ import { supabase } from '../lib/supabase';
 import { pullRemoteProfileIntoCache } from '../lib/profileSupabase';
 import { fetchAllUserDataFromSupabase } from '../lib/userDataSync';
 import { migrateLocalDataToSupabaseAndCleanup } from '../lib/localToSupabaseMigration';
+import { preloadHealthEngineData } from '../data/healthEngine';
+import { preloadHabitPlanData } from '../data/habitPlan';
+import { preloadMlEngineData } from '../data/mlEngine';
+import { preloadMedicalEngineData } from '../data/medicalEngine';
 
 export default function Splash() {
   const router = useRouter();
@@ -36,6 +40,12 @@ export default function Splash() {
           await migrateLocalDataToSupabaseAndCleanup();
           await fetchAllUserDataFromSupabase();
         }
+        await Promise.all([
+          preloadHealthEngineData(),
+          preloadHabitPlanData(),
+          preloadMlEngineData(),
+          preloadMedicalEngineData(),
+        ]);
         await pullRemoteProfileIntoCache();
         const profile = await loadProfile();
 

@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, useThemeColors } from '../context/ThemeContext';
@@ -246,12 +247,42 @@ function getFallbackDetail(meal: any) {
 }
 
 import { MEALS } from '../data/localData';
+import { getMeals } from '../lib/database';
 
 export default function MealDetail() {
   const { isDark } = useTheme();
   const C = useThemeColors();
   const { id } = useLocalSearchParams();
-  const meal = MEALS.find(m => m.id === id);
+  const [meal, setMeal] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    getMeals()
+      .then((rows) => {
+        if (!mounted) return;
+        const all = rows?.length ? rows : MEALS;
+        setMeal(all.find((m: any) => String(m.id) === String(id)) ?? null);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setMeal(MEALS.find((m) => String(m.id) === String(id)) ?? null);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <View style={[s.container, { backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color="#E8FF4D" />
+      </View>
+    );
+  }
   if (!meal) return null;
 
   const detail = MEAL_DETAIL_DATA[meal.id as string] || getFallbackDetail(meal);

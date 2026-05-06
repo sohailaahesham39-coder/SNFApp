@@ -2,6 +2,7 @@
 // Habit Reduction Plan Engine
 // Smart Nutrition & Fitness Chatbot
 // ============================================================
+import { supabase } from '../lib/supabase';
 
 export interface HabitDetail {
   habitName: string;
@@ -30,7 +31,7 @@ export interface HabitPlan {
 }
 
 // ── Questions for each habit ─────────────────────────────────
-export const HABIT_QUESTIONS: Record<string, {
+export let HABIT_QUESTIONS: Record<string, {
   question: string;
   unit: string;
   options: { label: string; value: number }[];
@@ -122,6 +123,24 @@ export const HABIT_QUESTIONS: Record<string, {
     ],
   },
 };
+
+let habitPlanRemoteLoaded = false;
+
+export async function preloadHabitPlanData(): Promise<void> {
+  if (habitPlanRemoteLoaded) return;
+  try {
+    const { data, error } = await supabase
+      .from('local_habit_plan_data')
+      .select('payload')
+      .eq('key', 'habit_questions')
+      .maybeSingle();
+    if (error || !data?.payload || typeof data.payload !== 'object') return;
+    HABIT_QUESTIONS = data.payload as typeof HABIT_QUESTIONS;
+    habitPlanRemoteLoaded = true;
+  } catch {
+    // keep local fallback
+  }
+}
 
 // ── Progressive plan generation logic ────────────────────────
 export function generateHabitPlan(habitName: string, dailyAmount: number): HabitPlan {

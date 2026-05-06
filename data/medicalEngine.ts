@@ -3,9 +3,10 @@
 // Comprehensive medical history, lab recommendations,
 // and 10-day safe plan system
 // ============================================================
+import { supabase } from '../lib/supabase';
 
 // ── Comprehensive Medical Conditions ─────────────────────────
-export const MEDICAL_CONDITIONS = {
+export let MEDICAL_CONDITIONS = {
   cardiovascular: {
     label: '❤️ Cardiovascular',
     color: '#FF6B6B',
@@ -115,7 +116,7 @@ export interface LabTest {
   estimatedCost?: string;
 }
 
-export const LAB_TESTS_DATABASE: Record<string, LabTest[]> = {
+export let LAB_TESTS_DATABASE: Record<string, LabTest[]> = {
   hypertension: [
     { code: 'BP-24H',    name: '24-hour Blood Pressure Monitor', reason: 'Check blood pressure pattern throughout the day', priority: 'high',   estimatedCost: '150-300 EGP' },
     { code: 'LIPID',     name: 'Lipid Profile',                  reason: 'Check cholesterol levels',                       priority: 'high',   estimatedCost: '80-150 EGP'  },
@@ -438,7 +439,7 @@ export function getLabRecommendations(conditions: string[]): LabTest[] {
   return allTests.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 }
 
-export const FEEDBACK_QUESTIONS = [
+export let FEEDBACK_QUESTIONS = [
   {
     id: 'energy',
     question: 'How is your energy compared to the start?',
@@ -485,3 +486,26 @@ export const FEEDBACK_QUESTIONS = [
     ],
   },
 ];
+
+let medicalEngineRemoteLoaded = false;
+
+export async function preloadMedicalEngineData(): Promise<void> {
+  if (medicalEngineRemoteLoaded) return;
+  try {
+    const { data, error } = await supabase.from('local_medical_engine_data').select('key,payload');
+    if (error || !data || data.length === 0) return;
+    const map = new Map<string, unknown>(data.map((row: any) => [String(row.key), row.payload]));
+    if (map.get('medical_conditions') && typeof map.get('medical_conditions') === 'object') {
+      MEDICAL_CONDITIONS = map.get('medical_conditions') as typeof MEDICAL_CONDITIONS;
+    }
+    if (map.get('lab_tests_database') && typeof map.get('lab_tests_database') === 'object') {
+      LAB_TESTS_DATABASE = map.get('lab_tests_database') as Record<string, LabTest[]>;
+    }
+    if (Array.isArray(map.get('feedback_questions'))) {
+      FEEDBACK_QUESTIONS = map.get('feedback_questions') as typeof FEEDBACK_QUESTIONS;
+    }
+    medicalEngineRemoteLoaded = true;
+  } catch {
+    // Keep local fallback when offline/errors.
+  }
+}

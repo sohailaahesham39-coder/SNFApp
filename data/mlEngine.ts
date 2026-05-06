@@ -2,9 +2,10 @@
 // ML Engine — Smart Nutrition & Fitness Chatbot
 // 3 real ML algorithms using the CSV training data
 // ============================================================
+import { supabase } from '../lib/supabase';
 
 // ── Training Data (from user_progress.csv — 64 records) ─────
-const TRAINING_DATA = [
+let TRAINING_DATA = [
   { user:'USR001', week:1, weight:85.0, calories:1750, protein:125, workout:true,  burned:320, goal:'Weight Loss', sleep:7.0, mood:7 },
   { user:'USR001', week:2, weight:84.3, calories:1820, protein:135, workout:true,  burned:350, goal:'Weight Loss', sleep:7.5, mood:7 },
   { user:'USR001', week:3, weight:83.8, calories:1780, protein:128, workout:true,  burned:380, goal:'Weight Loss', sleep:8.0, mood:8 },
@@ -72,7 +73,7 @@ const TRAINING_DATA = [
 ];
 
 // ── Meal Data (from meals_fixed.csv) ────────────────────────
-const MEAL_SCORES = [
+let MEAL_SCORES = [
   { id:'MEAL001', name:'Egyptian Healthy Breakfast',    type:'Breakfast', cal:380, protein:22, wl:8, mg:7, hh:9, db:8  },
   { id:'MEAL002', name:'Light Breakfast',               type:'Breakfast', cal:250, protein:15, wl:9, mg:5, hh:8, db:9  },
   { id:'MEAL003', name:'High Protein Breakfast',        type:'Breakfast', cal:420, protein:35, wl:7, mg:10,hh:7, db:7  },
@@ -408,4 +409,20 @@ export function runMLEngine(profile: {
       weeksWorkout: 8,
     }, 8),
   };
+}
+
+let mlRemoteLoaded = false;
+
+export async function preloadMlEngineData(): Promise<void> {
+  if (mlRemoteLoaded) return;
+  try {
+    const { data, error } = await supabase.from('local_ml_engine_data').select('key,payload');
+    if (error || !data || data.length === 0) return;
+    const map = new Map<string, unknown>(data.map((row: any) => [String(row.key), row.payload]));
+    if (Array.isArray(map.get('training_data'))) TRAINING_DATA = map.get('training_data') as typeof TRAINING_DATA;
+    if (Array.isArray(map.get('meal_scores'))) MEAL_SCORES = map.get('meal_scores') as typeof MEAL_SCORES;
+    mlRemoteLoaded = true;
+  } catch {
+    // keep local fallback
+  }
 }

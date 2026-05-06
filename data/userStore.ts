@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 
 export interface UserProfile {
   name: string;
@@ -27,10 +28,45 @@ const KEY = 'sn_user_profile';
 
 export async function saveProfile(profile: UserProfile): Promise<void> {
   await AsyncStorage.setItem(KEY, JSON.stringify(profile));
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const uid = sessionData.session?.user?.id;
+    const email = sessionData.session?.user?.email ?? profile.email ?? '';
+    if (!uid) return;
+    await supabase.from('profiles').upsert(
+      {
+        id: uid,
+        email: String(email).trim().toLowerCase(),
+        data: profile,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' },
+    );
+  } catch {
+    // Keep local fallback when offline or unauthorized.
+  }
 }
 
 export async function loadProfile(): Promise<UserProfile | null> {
   try {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const uid = sessionData.session?.user?.id;
+      if (uid) {
+        const { data: remote } = await supabase
+          .from('profiles')
+          .select('data')
+          .eq('id', uid)
+          .maybeSingle();
+        if (remote?.data && typeof remote.data === 'object') {
+          const profile = remote.data as UserProfile;
+          await AsyncStorage.setItem(KEY, JSON.stringify(profile));
+          return profile;
+        }
+      }
+    } catch {
+      // continue to local fallback
+    }
     const data = await AsyncStorage.getItem(KEY);
     if (!data) return null;
     return JSON.parse(data) as UserProfile;

@@ -8,6 +8,7 @@ import { tryLogDailyProgressFromHome } from '../../lib/progressLog';
 import { MEALS, WORKOUTS } from '../../data/localData';
 import { useThemeColors } from '../../context/ThemeContext';
 import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
+import { getMeals, getWorkouts } from '../../lib/database';
 
 const { width } = Dimensions.get('window');
 
@@ -52,14 +53,14 @@ function getGoalConfig(goal: string) {
   };
 }
 
-function filterMealsForUser(profile: UserProfile) {
+function filterMealsForUser(profile: UserProfile, mealsInput: any[]) {
   const mealType = getMealTypeForTime();
   const goal = profile.goal;
   const conditions = profile.conditions ?? [];
   const allergens = profile.allergens ?? [];
 
   // score each meal
-  const scored = MEALS.map(meal => {
+  const scored = mealsInput.map(meal => {
     let score = 0;
 
     // prefer current meal time
@@ -105,11 +106,11 @@ function filterMealsForUser(profile: UserProfile) {
     .map(s => s.meal);
 }
 
-function getRecommendedWorkouts(profile: UserProfile) {
+function getRecommendedWorkouts(profile: UserProfile, workoutsInput: any[]) {
   const goal = profile.goal;
   const conditions = profile.conditions ?? [];
 
-  return WORKOUTS.filter(w => {
+  return workoutsInput.filter(w => {
     // match goal
     if (!w.goal.includes(goal === 'Maintain' ? 'Maintain' : goal)) return false;
     // no barbell for heart/kidney patients
@@ -145,6 +146,8 @@ export default function Home() {
   const C = useThemeColors();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [mealsData, setMealsData] = useState<any[]>(MEALS);
+  const [workoutsData, setWorkoutsData] = useState<any[]>(WORKOUTS);
 
   async function load() {
     const p = await loadProfileSupabaseFirst();
@@ -153,6 +156,12 @@ export default function Home() {
       return;
     }
     setProfile(p);
+    const [remoteMeals, remoteWorkouts] = await Promise.all([
+      getMeals().catch(() => MEALS),
+      getWorkouts().catch(() => WORKOUTS),
+    ]);
+    setMealsData(remoteMeals?.length ? remoteMeals : MEALS);
+    setWorkoutsData(remoteWorkouts?.length ? remoteWorkouts : WORKOUTS);
     void tryLogDailyProgressFromHome(p);
   }
 
@@ -169,8 +178,8 @@ export default function Home() {
   // ── derived data ────────────────────────────────────────────────────────────
   const goalConfig = getGoalConfig(profile.goal);
   const bmiCat = getBMICategory(profile.bmi);
-  const recommendedMeals = filterMealsForUser(profile);
-  const recommendedWorkouts = getRecommendedWorkouts(profile);
+  const recommendedMeals = filterMealsForUser(profile, mealsData);
+  const recommendedWorkouts = getRecommendedWorkouts(profile, workoutsData);
   const conditionTips = getConditionTips(profile.conditions ?? []);
   const mealType = getMealTypeForTime();
 

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WORKOUTS } from '../data/localData';
+import { getWorkouts } from '../lib/database';
 import { useTheme, useThemeColors } from '../context/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,11 +11,32 @@ export default function WorkoutDetail() {
   const { isDark } = useTheme();
   const C = useThemeColors();
   const { id } = useLocalSearchParams();
-  const workout = WORKOUTS.find(w => w.id === id);
+  const [workout, setWorkout] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
   const [timerActive, setTimerActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
   const intervalRef = useRef<any>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getWorkouts()
+      .then((rows) => {
+        if (!mounted) return;
+        const all = rows?.length ? rows : WORKOUTS;
+        setWorkout(all.find((w: any) => String(w.id) === String(id)) ?? null);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setWorkout(WORKOUTS.find((w) => String(w.id) === String(id)) ?? null);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
 
   useEffect(() => {
     if (timerActive && timeLeft > 0) {
@@ -28,6 +50,13 @@ export default function WorkoutDetail() {
     return () => clearInterval(intervalRef.current);
   }, [timerActive]);
 
+  if (loading) {
+    return (
+      <View style={[s.container, { backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color="#E8FF4D" />
+      </View>
+    );
+  }
   if (!workout) return null;
 
   const restTime = (workout as any).rest_seconds || 60;

@@ -2,9 +2,10 @@
 // Health Engine — Smart Nutrition & Fitness Chatbot
 // Complete integrated health system in English
 // ============================================================
+import { supabase } from '../lib/supabase';
 
 // ── 1. Chronic Conditions (comprehensive) ────────────────────
-export const CHRONIC_CONDITIONS = [
+export let CHRONIC_CONDITIONS = [
   { id: 'hypertension',   name: 'High Blood Pressure',    icon: '🩸', category: 'cardio'    },
   { id: 'heart_disease',  name: 'Heart Disease',          icon: '🫀', category: 'cardio'    },
   { id: 'arrhythmia',     name: 'Irregular Heartbeat',    icon: '💓', category: 'cardio'    },
@@ -37,7 +38,7 @@ export const CHRONIC_CONDITIONS = [
 ];
 
 // ── 2. Symptoms (how they feel) ──────────────────────────────
-export const SYMPTOMS_LIST = [
+export let SYMPTOMS_LIST = [
   { id: 'sym_fatigue',    name: 'Chronic fatigue all day',       icon: '😴' },
   { id: 'sym_dizzy',      name: 'Dizziness or vertigo',          icon: '💫' },
   { id: 'sym_headache',   name: 'Frequent headaches',            icon: '🤕' },
@@ -61,7 +62,7 @@ export const SYMPTOMS_LIST = [
 ];
 
 // ── 3. Acute Episodes (attacks/crises) ────────────────────────
-export const ACUTE_EPISODES = [
+export let ACUTE_EPISODES = [
   { id: 'ep_asthma',      name: 'Asthma attacks',                icon: '💨', severity: 'high'   },
   { id: 'ep_chestpain',   name: 'Chest pain episodes',           icon: '💔', severity: 'urgent' },
   { id: 'ep_palpitat',    name: 'Heart palpitations',            icon: '💓', severity: 'high'   },
@@ -73,7 +74,7 @@ export const ACUTE_EPISODES = [
 ];
 
 // ── 4. Drinking Habits (what they drink daily) ───────────────
-export const DRINKING_HABITS = [
+export let DRINKING_HABITS = [
   { id: 'drink_coffee',   name: 'Coffee',          icon: '☕', defaultAmount: '2 cups/day',     goodLimit: '1-2 cups', risky: '5+ cups' },
   { id: 'drink_tea',      name: 'Heavy Tea',       icon: '🍵', defaultAmount: '3 cups/day',     goodLimit: '2-3 cups', risky: '6+ cups' },
   { id: 'drink_soda',     name: 'Soft Drinks',     icon: '🥤', defaultAmount: '1 can/day',      goodLimit: '0 cans',   risky: '2+ cans' },
@@ -84,7 +85,7 @@ export const DRINKING_HABITS = [
 ];
 
 // ── 5. Lifestyle Habits ──────────────────────────────────────
-export const LIFESTYLE_HABITS = [
+export let LIFESTYLE_HABITS = [
   { id: 'hab_smoke',      name: 'Smoking',                icon: '🚬', risk: 'very-high' },
   { id: 'hab_latesleep',  name: 'Late sleep (after 2am)', icon: '🦉', risk: 'medium' },
   { id: 'hab_noexercise', name: 'No exercise',            icon: '🛋',  risk: 'high' },
@@ -105,7 +106,7 @@ export interface LabTest {
   fastingRequired: boolean;
 }
 
-export const LAB_TESTS: Record<string, LabTest[]> = {
+export let LAB_TESTS: Record<string, LabTest[]> = {
   hypertension: [
     { code: 'BP24',    name: '24-Hour Blood Pressure Monitor', reason: 'Track BP pattern through the day',     priority: 'high',   cost: '150-300 EGP', fastingRequired: false },
     { code: 'LIPID',   name: 'Lipid Profile',                  reason: 'Check cholesterol levels',              priority: 'high',   cost: '80-150 EGP',  fastingRequired: true  },
@@ -209,7 +210,7 @@ export interface Supplement {
   warning: string;
 }
 
-export const SAFE_SUPPLEMENTS: Record<string, Supplement> = {
+export let SAFE_SUPPLEMENTS: Record<string, Supplement> = {
   vitamin_d: {
     name: 'Vitamin D3',
     dose: '1000-2000 IU/day (safe starting dose)',
@@ -806,7 +807,7 @@ export function analyzeCompliance(tasks: SafePlanTask[]): {
   };
 }
 
-export const FEEDBACK_QUESTIONS = [
+export let FEEDBACK_QUESTIONS = [
   {
     id: 'energy',
     question: 'How is your energy compared to the start?',
@@ -2359,4 +2360,27 @@ export function generateHabitReductionPlan(
     adjustmentGuidance: { speedUp: [], slowDown: [], restart: [] },
     successTips: [],
   };
+}
+
+let healthEngineRemoteLoaded = false;
+
+export async function preloadHealthEngineData(): Promise<void> {
+  if (healthEngineRemoteLoaded) return;
+  try {
+    const { data, error } = await supabase.from('local_health_engine_data').select('key,payload');
+    if (error || !data || data.length === 0) return;
+    const map = new Map<string, unknown>(data.map((row: any) => [String(row.key), row.payload]));
+
+    if (Array.isArray(map.get('chronic_conditions'))) CHRONIC_CONDITIONS = map.get('chronic_conditions') as typeof CHRONIC_CONDITIONS;
+    if (Array.isArray(map.get('symptoms_list'))) SYMPTOMS_LIST = map.get('symptoms_list') as typeof SYMPTOMS_LIST;
+    if (Array.isArray(map.get('acute_episodes'))) ACUTE_EPISODES = map.get('acute_episodes') as typeof ACUTE_EPISODES;
+    if (Array.isArray(map.get('drinking_habits'))) DRINKING_HABITS = map.get('drinking_habits') as typeof DRINKING_HABITS;
+    if (Array.isArray(map.get('lifestyle_habits'))) LIFESTYLE_HABITS = map.get('lifestyle_habits') as typeof LIFESTYLE_HABITS;
+    if (map.get('lab_tests') && typeof map.get('lab_tests') === 'object') LAB_TESTS = map.get('lab_tests') as Record<string, LabTest[]>;
+    if (map.get('safe_supplements') && typeof map.get('safe_supplements') === 'object') SAFE_SUPPLEMENTS = map.get('safe_supplements') as Record<string, Supplement>;
+    if (Array.isArray(map.get('feedback_questions'))) FEEDBACK_QUESTIONS = map.get('feedback_questions') as typeof FEEDBACK_QUESTIONS;
+    healthEngineRemoteLoaded = true;
+  } catch {
+    // fallback to local constants when remote fetch fails/offline
+  }
 }

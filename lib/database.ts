@@ -4,24 +4,31 @@ import { MEALS, WORKOUTS, CHATBOT_RESPONSES } from '../data/localData';
 export async function getMeals() {
   try {
     const { data, error } = await supabase
-      .from('meals')
+      .from('local_meals')
       .select('*')
       .limit(30);
     if (error || !data || data.length === 0) return MEALS;
     return data.map((m: any) => ({
-      id: m.meal_id,
-      name: m.meal_name,
+      id: m.id,
+      name: m.name,
       meal_type: m.meal_type,
       calories: m.calories,
-      protein: m.protein_g,
-      carbs: m.carbs_g,
-      fat: m.fats_g,
-      emoji: getEmoji(m.meal_type),
+      protein: m.protein,
+      carbs: m.carbs,
+      fat: m.fat,
+      fiber: m.fiber ?? 0,
+      emoji: m.emoji || getEmoji(m.meal_type),
       foods: m.foods || '',
       difficulty: m.difficulty || 'Easy',
-      prep_time: m.prep_time_min || 15,
-      conditions_suitable: m.conditions_suitable ? m.conditions_suitable.split(',').map((s: string) => s.trim()) : [],
-      is_vegetarian: m.is_vegetarian,
+      prep_time: m.prep_time || 15,
+      conditions_suitable: Array.isArray(m.conditions_suitable) ? m.conditions_suitable : [],
+      conditions_avoid: Array.isArray(m.conditions_avoid) ? m.conditions_avoid : [],
+      weight_loss_score: m.weight_loss_score ?? 0,
+      muscle_gain_score: m.muscle_gain_score ?? 0,
+      heart_health_score: m.heart_health_score ?? 0,
+      diabetes_score: m.diabetes_score ?? 0,
+      is_vegetarian: Boolean(m.is_vegetarian),
+      is_gluten_free: Boolean(m.is_gluten_free),
     }));
   } catch { return MEALS; }
 }
@@ -29,22 +36,24 @@ export async function getMeals() {
 export async function getWorkouts() {
   try {
     const { data, error } = await supabase
-      .from('workouts')
+      .from('local_workouts')
       .select('*')
       .limit(30);
     if (error || !data || data.length === 0) return WORKOUTS;
     return data.map((w: any) => ({
-      id: w.exercise_id,
-      name: w.exercise_name,
+      id: w.id,
+      name: w.name,
       muscle_group: w.muscle_group,
       difficulty: w.difficulty,
       equipment: w.equipment,
       calories_burned: w.calories_burned,
       duration: w.duration,
-      sets: 3,
-      reps: '12-15',
-      emoji: getWorkoutEmoji(w.muscle_group),
-      goal: ['Weight Loss', 'Muscle Gain'],
+      sets: w.sets ?? 3,
+      reps: w.reps || '12-15',
+      emoji: w.emoji || getWorkoutEmoji(w.muscle_group),
+      goal: Array.isArray(w.goal) ? w.goal : ['Weight Loss', 'Muscle Gain'],
+      instructions: w.instructions || '',
+      rest_seconds: w.rest_seconds ?? 60,
     }));
   } catch { return WORKOUTS; }
 }
@@ -52,9 +61,9 @@ export async function getWorkouts() {
 export async function getMealsByCondition(condition: string) {
   try {
     const { data, error } = await supabase
-      .from('meals')
+      .from('local_meals')
       .select('*')
-      .ilike('conditions_suitable', `%${condition}%`)
+      .contains('conditions_suitable', [condition])
       .limit(10);
     if (error || !data) return MEALS.filter(m => m.conditions_suitable.includes(condition));
     return data;
@@ -76,9 +85,9 @@ export async function getNutritionByCondition(condition: string) {
 export async function getHealthCondition(condition: string) {
   try {
     const { data, error } = await supabase
-      .from('health_conditions')
+      .from('local_health_conditions')
       .select('*')
-      .eq('condition', condition)
+      .ilike('name', condition)
       .single();
     if (error) return null;
     return data;
@@ -88,8 +97,32 @@ export async function getHealthCondition(condition: string) {
 export async function getChatbotIntents() {
   try {
     const { data, error } = await supabase
-      .from('chatbot_intents')
+      .from('local_chatbot_responses')
       .select('*');
+    if (error || !data || data.length === 0) return CHATBOT_RESPONSES;
+    return Object.fromEntries(data.map((row: any) => [row.key, row.response]));
+  } catch {
+    return CHATBOT_RESPONSES;
+  }
+}
+
+export async function getHealthConditions() {
+  try {
+    const { data, error } = await supabase
+      .from('local_health_conditions')
+      .select('*')
+      .order('id', { ascending: true });
+    if (error || !data) return null;
+    return data;
+  } catch { return null; }
+}
+
+export async function getAllergens() {
+  try {
+    const { data, error } = await supabase
+      .from('local_allergens')
+      .select('*')
+      .order('id', { ascending: true });
     if (error || !data) return null;
     return data;
   } catch { return null; }
