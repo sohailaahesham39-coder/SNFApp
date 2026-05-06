@@ -43,3 +43,4 @@ yarn-error.*
 # environment and tools
 .venv/
 .sixth/
+.env
