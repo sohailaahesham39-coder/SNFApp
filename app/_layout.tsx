@@ -11,7 +11,7 @@ import {
   loadNotificationSettings,
   requestLocalNotificationPermission,
 } from '../lib/localNotifications';
-import { setupPushNotifications } from '../lib/pushNotifications';
+import { cleanupPushListeners, setupPushNotifications } from '../lib/pushNotifications';
 
 function Inner() {
   const { isDark } = useTheme();
@@ -67,6 +67,9 @@ function Inner() {
       });
     };
     init().catch(() => {});
+    return () => {
+      cleanupPushListeners();
+    };
   }, []);
 
   return (

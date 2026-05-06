@@ -7,7 +7,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "seed:medical": "tsx scripts/seed-medical-data.ts"
+    "seed:medical": "tsx scripts/seed-medical-data.ts",
+    "verify:data": "tsx scripts/verify-data-integrity.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

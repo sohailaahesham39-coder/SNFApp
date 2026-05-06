@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { buildPushTemplate, type PushEventType } from './pushEventTemplates';
 
 let unsubscribeForeground: (() => void) | null = null;
 let unsubscribeOpened: (() => void) | null = null;
@@ -88,5 +89,37 @@ export function cleanupPushListeners(): void {
     unsubscribeOpened();
     unsubscribeOpened = null;
   }
+}
+
+export function registerBackgroundPushHandler(): void {
+  if (Platform.OS === 'web') return;
+  import('@react-native-firebase/messaging')
+    .then((module) => {
+      const messaging = module.default;
+      messaging().setBackgroundMessageHandler(async () => {
+        // Background receipt handled by native runtime; payload-specific
+        // navigation occurs when app opens via getInitialNotification().
+      });
+    })
+    .catch(() => {});
+}
+
+export async function sendPushEventPreview(
+  eventType: PushEventType,
+  token: string,
+  target = '/(tabs)/home'
+): Promise<void> {
+  const payload = buildPushTemplate({ eventType, target });
+  await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: token,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: payload.data,
+    }),
+  }).catch(() => undefined);
 }
 
