@@ -908,14 +908,101 @@ export interface DeficiencyAnalysis {
   };
 }
 
-export function generateDeficiencyAnalysisSheet(
+let vitaminsGuideCache: any[] | null = null;
+let labTestsCatalogCache: any[] | null = null;
+let habitReductionPlansCache: any[] | null = null;
+let waterRemindersCache: any[] | null = null;
+
+async function getVitaminsGuideCached() {
+  if (vitaminsGuideCache) return vitaminsGuideCache;
+  const { data, error } = await supabase.from('vitamins_guide').select('*');
+  if (error) throw error;
+  vitaminsGuideCache = data ?? [];
+  return vitaminsGuideCache;
+}
+
+async function getLabTestsCatalogCached() {
+  if (labTestsCatalogCache) return labTestsCatalogCache;
+  const { data, error } = await supabase.from('lab_tests_catalog').select('*');
+  if (error) throw error;
+  labTestsCatalogCache = data ?? [];
+  return labTestsCatalogCache;
+}
+
+async function getHabitReductionPlansCached() {
+  if (habitReductionPlansCache) return habitReductionPlansCache;
+  const { data, error } = await supabase.from('habit_reduction_plans').select('*');
+  if (error) throw error;
+  habitReductionPlansCache = data ?? [];
+  return habitReductionPlansCache;
+}
+
+export async function getWaterReminderForProfile(age: number, gender: string, activityLevel: string, weightKg: number) {
+  if (!waterRemindersCache) {
+    const { data, error } = await supabase.from('water_reminders').select('*');
+    if (error) throw error;
+    waterRemindersCache = data ?? [];
+  }
+  return (waterRemindersCache ?? []).find((row: any) =>
+    age >= (row.age_min ?? 0) &&
+    age <= (row.age_max ?? 120) &&
+    String(row.gender ?? '').toLowerCase() === String(gender).toLowerCase() &&
+    String(row.activity_level ?? '').toLowerCase() === String(activityLevel).toLowerCase() &&
+    weightKg >= (row.weight_min_kg ?? 0) &&
+    weightKg <= (row.weight_max_kg ?? 999)
+  ) ?? null;
+}
+
+export async function generateDeficiencyAnalysisSheet(
   conditions: string[],
   symptoms: string[],
   habits: string[],
   age: number,
   gender: 'male' | 'female'
-): DeficiencyAnalysis[] {
+): Promise<DeficiencyAnalysis[]> {
   const results: DeficiencyAnalysis[] = [];
+  try {
+    const rows = await getVitaminsGuideCached();
+    const rowsByCondition = rows.filter((r: any) => conditions.includes(String(r.condition_id)));
+    const rowsBySymptom = rows.filter((r: any) => symptoms.includes(String(r.symptom_id)));
+    const mergedRows = [...rowsByCondition, ...rowsBySymptom];
+
+    const dedup = new Map<string, any>();
+    mergedRows.forEach((r: any) => {
+      const key = String(r.nutrient ?? '').toLowerCase();
+      if (!key || dedup.has(key)) return;
+      dedup.set(key, r);
+    });
+
+    if (dedup.size > 0) {
+      const mapped = Array.from(dedup.values()).map((row: any): DeficiencyAnalysis => ({
+        nutrient: row.nutrient ?? 'Supplement',
+        emoji: '💊',
+        confidence: row.priority === 'high' ? 85 : row.priority === 'medium' ? 70 : 60,
+        matchedSymptoms: SYMPTOMS_LIST.filter((s) => symptoms.includes(s.id)).map((s) => ({ id: s.id, name: s.name })),
+        scientificBasis: `Matched from Supabase vitamins_guide by condition/symptom filters`,
+        riskLevel: 'safe_to_start',
+        supplement: {
+          name: row.nutrient ?? 'Supplement',
+          dose: row.dose_range ?? 'As directed',
+          timing: row.timing ?? 'With meal',
+          duration: row.duration ?? '2-4 weeks',
+          cost: row.cost_egp ?? 'N/A',
+          with: 'Food and hydration',
+        },
+        labTests: [],
+        egyptianFoods: String(row.egyptian_foods ?? '')
+          .split(',')
+          .map((f: string) => f.trim())
+          .filter(Boolean)
+          .map((food: string) => ({ name: food, emoji: '🥗', amount: 'Serving', nutrientContent: row.nutrient ?? 'Support' })),
+        warnings: [row.contraindications ?? 'Follow physician advice if on medication'],
+      }));
+      if (mapped.length > 0) return mapped;
+    }
+  } catch {
+    // fallback to local hardcoded engine
+  }
 
   // ── IRON DEFICIENCY ────────────────────────────────────────
   const ironSymptoms = ['sym_fatigue', 'sym_dizzy', 'sym_hairloss', 'sym_palecolor', 'sym_weakness', 'sym_headache'];
@@ -1338,14 +1425,65 @@ export interface LabTestPlanItem {
   relatedTo: string[];  // conditions/symptoms
 }
 
-export function generateLabTestPlan(
+export async function generateLabTestPlan(
   conditions: string[],
   symptoms: string[],
   habits: string[],
   age: number,
   gender: 'male' | 'female',
   lastLabDate?: string
-): LabTestPlan {
+): Promise<LabTestPlan> {
+  try {
+    const rows = await getLabTestsCatalogCached();
+    const matched = rows
+      .filter((r: any) => conditions.includes(String(r.condition_id)))
+      .sort((a: any, b: any) => {
+        const priorityScore: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+        return (priorityScore[String(a.priority)] ?? 9) - (priorityScore[String(b.priority)] ?? 9);
+      });
+
+    if (matched.length > 0) {
+      const urgent: LabTestPlanItem[] = [];
+      const high: LabTestPlanItem[] = [];
+      const medium: LabTestPlanItem[] = [];
+
+      matched.forEach((row: any) => {
+        const item: LabTestPlanItem = {
+          code: row.test_code,
+          name: row.test_name,
+          why: row.why_needed,
+          cost: `${row.cost_min_egp}-${row.cost_max_egp} EGP`,
+          costMin: row.cost_min_egp ?? 0,
+          costMax: row.cost_max_egp ?? 0,
+          fasting: Number(row.fasting_hours ?? 0) > 0,
+          fastingHours: row.fasting_hours ?? 0,
+          bestTime: row.best_time ?? 'Morning',
+          where: 'Any trusted lab',
+          prepare: row.preparation ? [String(row.preparation)] : ['No special preparation'],
+          relatedTo: [row.condition_id],
+        };
+        if (row.priority === 'urgent') urgent.push(item);
+        else if (row.priority === 'high') high.push(item);
+        else medium.push(item);
+      });
+
+      const allTests = [...urgent, ...high, ...medium];
+      return {
+        totalTests: allTests.length,
+        totalCostMin: allTests.reduce((sum, t) => sum + t.costMin, 0),
+        totalCostMax: allTests.reduce((sum, t) => sum + t.costMax, 0),
+        urgent,
+        high,
+        medium,
+        fastingRequired: allTests.some((t) => t.fasting),
+        fastingTests: allTests.filter((t) => t.fasting).map((t) => t.name),
+        packageSuggestions: [],
+        tips: ['Prioritized from Supabase lab_tests_catalog by your conditions.'],
+      };
+    }
+  } catch {
+    // fallback to local hardcoded plan
+  }
   const urgent: LabTestPlanItem[] = [];
   const high: LabTestPlanItem[] = [];
   const medium: LabTestPlanItem[] = [];
@@ -1877,12 +2015,42 @@ export interface HabitReductionPlan {
   successTips: string[];
 }
 
-export function generateHabitReductionPlan(
+export async function generateHabitReductionPlan(
   habitId: string,
   currentAmount: number,
   conditions: string[],
   symptoms: string[]
-): HabitReductionPlan {
+): Promise<HabitReductionPlan> {
+  try {
+    const rows = await getHabitReductionPlansCached();
+    const row = rows.find((r: any) => String(r.habit_id) === habitId);
+    if (row) {
+      const weeks = [
+        { week: 1, target: Number(String(row.week_1_target).replace(/[^\d.]/g, '')) || currentAmount, reduction: 0, reductionPercent: 0, howTo: row.week_1_how ?? 'Reduce gradually', replaceWith: row.week_1_replace ?? 'Water', tip: 'Stay consistent', whyThisMatters: row.health_risks ?? 'Reduces health risk' },
+        { week: 2, target: Number(String(row.week_2_target).replace(/[^\d.]/g, '')) || currentAmount, reduction: 0, reductionPercent: 0, howTo: row.week_2_how ?? 'Reduce gradually', replaceWith: row.week_2_replace ?? 'Healthy option', tip: 'Track daily', whyThisMatters: row.expected_benefits ?? 'Improves outcomes' },
+        { week: 3, target: Number(String(row.week_3_target).replace(/[^\d.]/g, '')) || currentAmount, reduction: 0, reductionPercent: 0, howTo: row.week_3_how ?? 'Reduce gradually', replaceWith: row.week_3_replace ?? 'Healthy option', tip: 'Avoid triggers', whyThisMatters: row.expected_benefits ?? 'Improves outcomes' },
+        { week: 4, target: Number(String(row.week_4_target).replace(/[^\d.]/g, '')) || currentAmount, reduction: 0, reductionPercent: 0, howTo: row.week_4_how ?? 'Maintain target', replaceWith: row.week_4_replace ?? 'Healthy option', tip: 'Sustain plan', whyThisMatters: row.expected_benefits ?? 'Build long-term habit' },
+      ];
+      return {
+        habitName: row.habit_name ?? habitId,
+        emoji: '🎯',
+        currentAmount,
+        unit: 'units/day',
+        safeLimit: Number(String(row.safe_limit ?? '0').replace(/[^\d.]/g, '')) || 0,
+        riskLevel: row.risk_level ?? 'medium',
+        riskColor: row.risk_level === 'very-high' ? '#FF0000' : row.risk_level === 'high' ? '#FF6B6B' : row.risk_level === 'low' ? '#4DFF9E' : '#FF9D4D',
+        healthRisks: [{ risk: row.health_risks ?? 'General risk', severity: 'moderate', explanation: row.health_risks ?? 'General risk' }],
+        personalizedRisks: [],
+        weeks,
+        expectedBenefits: [{ benefit: row.expected_benefits ?? 'Health improvements', timeline: '1-4 weeks', emoji: '✅' }],
+        withdrawalSymptoms: [{ symptom: row.withdrawal_symptoms ?? 'Mild symptoms possible', when: 'First week', howToManage: 'Hydration and gradual reduction', severity: 'mild' }],
+        adjustmentGuidance: { speedUp: [], slowDown: [], restart: [] },
+        successTips: ['Follow weekly targets', 'Track daily adherence'],
+      };
+    }
+  } catch {
+    // fallback to local hardcoded plans
+  }
   
   // ── COFFEE REDUCTION ───────────────────────────────────────
   if (habitId === 'drink_coffee') {

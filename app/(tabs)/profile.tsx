@@ -19,6 +19,8 @@ import { runMLEngine, MLSummary } from '../../data/mlEngine';
 import { generateHabitPlan, HabitPlan, HABIT_QUESTIONS } from '../../data/habitPlan';
 import { signOutRemoteSessions } from '../../lib/sessionCleanup';
 import { loadProfileSupabaseFirst, upsertOnboardingDataFromProfile } from '../../lib/supabaseUserData';
+import { supabase } from '../../lib/supabase';
+import { type UserHealthPlanRow } from '../../lib/healthPlans';
 
 const { width } = Dimensions.get('window');
 
@@ -109,6 +111,7 @@ export default function Profile() {
   const [showAbout, setShowAbout] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [planHistory, setPlanHistory] = useState<UserHealthPlanRow[]>([]);
   const [editDraft, setEditDraft] = useState({
     name: '',
     email: '',
@@ -209,6 +212,17 @@ export default function Profile() {
         });
       setHabitPlans(plans);
       if (plans.length > 0) setSelectedHabit(plans[0].habitName);
+    });
+    supabase.auth.getUser().then(async ({ data }) => {
+      const userId = data.user?.id;
+      if (!userId) return;
+      const { data: rows } = await supabase
+        .from('user_health_plans')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setPlanHistory((rows as UserHealthPlanRow[]) ?? []);
     });
   }, []));
 
@@ -394,6 +408,22 @@ export default function Profile() {
                 <Text style={[s.metricLbl, { color: C.text }]}>{profile.activity}</Text>
                 <Text style={[s.metricVal, { color: C.text }]}>{bmiCat.label}</Text>
               </View>
+            </View>
+            <View style={[s.card, { borderColor: C.border, backgroundColor: C.bg2 }]}>
+              <Text style={[s.cardLbl, { color: C.text }]}>Plan History</Text>
+              {planHistory.length === 0 ? (
+                <Text style={[s.resultSub, { color: C.textMuted, paddingHorizontal: 16, paddingBottom: 16 }]}>
+                  No saved plans yet.
+                </Text>
+              ) : (
+                planHistory.slice(0, 5).map((plan) => (
+                  <View key={plan.id} style={s.metricRow}>
+                    <Text style={[s.metricIcon, { color: C.text }]}>📌</Text>
+                    <Text style={[s.metricLbl, { color: C.text }]}>{plan.plan_type}</Text>
+                    <Text style={[s.metricVal, { color: C.textMuted }]}>{plan.status}</Text>
+                  </View>
+                ))
+              )}
             </View>
           </>
         )}

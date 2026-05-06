@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,8 @@ import { MEALS, WORKOUTS } from '../../data/localData';
 import { useThemeColors } from '../../context/ThemeContext';
 import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
 import { getMeals, getWorkouts } from '../../lib/database';
+import { supabase } from '../../lib/supabase';
+import { getUserActivePlans, updatePlanProgress, type UserHealthPlanRow } from '../../lib/healthPlans';
 
 const { width } = Dimensions.get('window');
 
@@ -148,6 +150,11 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [mealsData, setMealsData] = useState<any[]>(MEALS);
   const [workoutsData, setWorkoutsData] = useState<any[]>(WORKOUTS);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [vitaminPlan, setVitaminPlan] = useState<UserHealthPlanRow | null>(null);
+  const [labPlan, setLabPlan] = useState<UserHealthPlanRow | null>(null);
+  const [habitPlan, setHabitPlan] = useState<UserHealthPlanRow | null>(null);
+  const [waterPlan, setWaterPlan] = useState<UserHealthPlanRow | null>(null);
 
   async function load() {
     const p = await loadProfileSupabaseFirst();
@@ -163,6 +170,20 @@ export default function Home() {
     setMealsData(remoteMeals?.length ? remoteMeals : MEALS);
     setWorkoutsData(remoteWorkouts?.length ? remoteWorkouts : WORKOUTS);
     void tryLogDailyProgressFromHome(p);
+    const authUser = await supabase.auth.getUser();
+    const userId = authUser.data.user?.id;
+    if (userId) {
+      setPlansLoading(true);
+      try {
+        const active = await getUserActivePlans(userId);
+        setVitaminPlan(active.vitamin[0] ?? null);
+        setLabPlan(active.lab[0] ?? null);
+        setHabitPlan(active.habit[0] ?? null);
+        setWaterPlan(active.water[0] ?? null);
+      } finally {
+        setPlansLoading(false);
+      }
+    }
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -191,6 +212,41 @@ export default function Home() {
 
   // calories display (target as goal for today)
   const todayTarget = profile.targetCalories;
+  const waterCups = Number(waterPlan?.plan_data?.consumedCupsToday ?? 0);
+  const waterGoalCups = Number(waterPlan?.plan_data?.cupsPerDay ?? 8);
+  const waterReminderTimes: string[] = waterPlan?.plan_data?.reminderTimes ?? [];
+  const nextWaterReminder = waterReminderTimes[0] ?? 'Not set';
+  const vitamins: any[] = vitaminPlan?.plan_data?.vitamins ?? [];
+  const vitaminsTaken = Number(vitaminPlan?.plan_data?.progress ?? 0);
+  const habitProgress = Number(habitPlan?.plan_data?.progress ?? 0);
+  const labTestsPending = Array.isArray(labPlan?.plan_data?.tests) ? labPlan!.plan_data.tests.length : 0;
+  const activePlansCount = [waterPlan, vitaminPlan, habitPlan, labPlan].filter(Boolean).length;
+
+  async function markWaterCup() {
+    if (!waterPlan) return;
+    const nextCups = Math.min(waterGoalCups, waterCups + 1);
+    const progress = Math.round((nextCups / Math.max(1, waterGoalCups)) * 100);
+    await updatePlanProgress(waterPlan.id, progress);
+    setWaterPlan({
+      ...waterPlan,
+      plan_data: { ...waterPlan.plan_data, consumedCupsToday: nextCups, progress },
+      status: progress >= 100 ? 'completed' : 'active',
+    });
+  }
+
+  async function markVitaminTaken() {
+    if (!vitaminPlan) return;
+    const count = Math.max(1, vitamins.length);
+    const current = Math.round((vitaminsTaken / 100) * count);
+    const next = Math.min(count, current + 1);
+    const progress = Math.round((next / count) * 100);
+    await updatePlanProgress(vitaminPlan.id, progress);
+    setVitaminPlan({
+      ...vitaminPlan,
+      plan_data: { ...vitaminPlan.plan_data, progress },
+      status: progress >= 100 ? 'completed' : 'active',
+    });
+  }
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: C.bg }]} edges={['top']}>
@@ -244,6 +300,61 @@ export default function Home() {
             <View style={[s.fill, { width: '0%', backgroundColor: goalConfig.color }]} />
           </View>
           <Text style={[s.trackHint, { color: C.textDim }]}>Log meals to track progress</Text>
+        </View>
+
+        {/* ── Water Tracker ── */}
+        <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Text style={[s.cardLbl, { color: C.textMuted }]}>WATER TRACKER</Text>
+          {plansLoading ? <ActivityIndicator color={C.accent} /> : !waterPlan ? (
+            <Text style={[s.calSub, { color: C.textMuted }]}>No active water plan yet.</Text>
+          ) : (
+            <>
+              <Text style={[s.calSub, { color: C.text }]}>
+                {waterCups}/{waterGoalCups} cups today
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 }}>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Text key={i} style={{ fontSize: 20, marginRight: 4 }}>{i < waterCups ? '💧' : '🥛'}</Text>
+                ))}
+              </View>
+              <Text style={[s.trackHint, { color: C.textDim }]}>Next reminder: {nextWaterReminder}</Text>
+              <TouchableOpacity style={[s.addMeal, { borderColor: C.accent + '55' }]} onPress={markWaterCup}>
+                <Text style={s.addMealT}>+ Mark one cup</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* ── Today's Vitamins ── */}
+        <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Text style={[s.cardLbl, { color: C.textMuted }]}>TODAY'S VITAMINS</Text>
+          {plansLoading ? <ActivityIndicator color={C.accent} /> : !vitaminPlan ? (
+            <Text style={[s.calSub, { color: C.textMuted }]}>No active vitamin plan.</Text>
+          ) : (
+            <>
+              {vitamins.slice(0, 3).map((v: any, idx: number) => (
+                <Text key={idx} style={[s.calSub, { color: C.text }]}>☐ {v.nutrient ?? v.name ?? 'Vitamin'}</Text>
+              ))}
+              <Text style={[s.trackHint, { color: C.textDim }]}>Progress: {vitaminsTaken}%</Text>
+              <TouchableOpacity style={[s.addMeal, { borderColor: C.accent + '55' }]} onPress={markVitaminTaken}>
+                <Text style={s.addMealT}>+ Mark vitamin as taken</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* ── Active Habit ── */}
+        <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Text style={[s.cardLbl, { color: C.textMuted }]}>ACTIVE HABIT</Text>
+          {plansLoading ? <ActivityIndicator color={C.accent} /> : !habitPlan ? (
+            <Text style={[s.calSub, { color: C.textMuted }]}>No active habit plan.</Text>
+          ) : (
+            <>
+              <Text style={[s.calSub, { color: C.text }]}>Current progress: {habitProgress}%</Text>
+              <Text style={[s.trackHint, { color: C.textDim }]}>Today's target: stay on weekly reduction plan.</Text>
+              <Text style={[s.trackHint, { color: '#4DFF9E' }]}>You are building consistency, keep going.</Text>
+            </>
+          )}
         </View>
 
         {/* ── Macros ── */}
@@ -323,6 +434,21 @@ export default function Home() {
           >
             <Text style={s.addMealT}>+ Log a meal</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* ── Quick Health Summary ── */}
+        <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Text style={[s.cardLbl, { color: C.textMuted }]}>QUICK HEALTH SUMMARY</Text>
+          {plansLoading ? <ActivityIndicator color={C.accent} /> : (
+            <>
+              <Text style={[s.calSub, { color: C.text }]}>Deficiencies count: {vitamins.length}</Text>
+              <Text style={[s.calSub, { color: C.text }]}>Lab tests pending: {labTestsPending}</Text>
+              <Text style={[s.calSub, { color: C.text }]}>Active plans: {activePlansCount}</Text>
+              <TouchableOpacity style={[s.addMeal, { borderColor: C.accent + '55' }]} onPress={() => router.push('/(tabs)/health')}>
+                <Text style={s.addMealT}>Open Health tab</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* ── Recommended Workouts ── */}

@@ -13,6 +13,13 @@ import {
   analyzeCompliance,
 } from '../../data/healthEngine';
 import { normalizeHealthDrinks, normalizedHabitsList } from '../../lib/healthDrinks';
+import { supabase } from '../../lib/supabase';
+import {
+  saveUserHabitPlan,
+  saveUserLabPlan,
+  saveUserVitaminPlan,
+  saveUserWaterPlan,
+} from '../../lib/healthPlans';
 
 type Section = 'overview' | 'analysis' | 'labs' | 'plan' | 'supplements';
 
@@ -50,7 +57,7 @@ export default function HealthTab() {
     const drinksObj = normalizeHealthDrinks((p as any).healthDrinks);
 
     // Deficiency analysis
-    const defAnalysis = generateDeficiencyAnalysisSheet(
+    const defAnalysis = await generateDeficiencyAnalysisSheet(
       conditions,
       symptoms,
       [...habits, ...Object.keys(drinksObj)],
@@ -60,7 +67,7 @@ export default function HealthTab() {
     setDeficiencies(defAnalysis);
 
     // Lab test plan
-    const labs = generateLabTestPlan(
+    const labs = await generateLabTestPlan(
       conditions,
       symptoms,
       habits,
@@ -72,7 +79,7 @@ export default function HealthTab() {
     // Habit reduction (example: coffee if present)
     const coffeeCups = drinksObj.coffee ?? 0;
     if (coffeeCups > 2) {
-      const habit = generateHabitReductionPlan(
+      const habit = await generateHabitReductionPlan(
         'drink_coffee',
         coffeeCups,
         conditions,
@@ -87,6 +94,21 @@ export default function HealthTab() {
       defAnalysis.slice(0, 2).map(d => d.nutrient.toLowerCase().replace(' ', '_'))
     );
     setSafePlan(plan);
+
+    // Persist generated plans to user_health_plans
+    const authUser = await supabase.auth.getUser();
+    const userId = authUser.data.user?.id;
+    if (userId) {
+      if (defAnalysis.length > 0) await saveUserVitaminPlan(userId, defAnalysis.slice(0, 3));
+      if (labs?.totalTests > 0) await saveUserLabPlan(userId, [...labs.urgent, ...labs.high, ...labs.medium]);
+      if (coffeeCups > 2) {
+        const generatedHabit = await generateHabitReductionPlan('drink_coffee', coffeeCups, conditions, symptoms);
+        await saveUserHabitPlan(userId, 'drink_coffee', generatedHabit);
+      }
+      const weight = typeof (p as any).weight === 'number' ? (p as any).weight : 70;
+      const waterGoal = Math.max(1800, Math.round(weight * 35));
+      await saveUserWaterPlan(userId, waterGoal, ['08:00', '12:30', '17:00', '20:30']);
+    }
   }
 
   if (!profile) {
