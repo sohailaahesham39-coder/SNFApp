@@ -31,53 +31,53 @@ const SYMPTOM_CATEGORIES = [
   {
     id: 'brain', label: 'Brain & Focus', icon: '🧠', color: '#9D8FFF',
     symptoms: [
-      { id: 's1', arabic: 'دوخة أو اضطراب توازن' },
-      { id: 's2', arabic: 'ضعف تركيز وشرود' },
-      { id: 's3', arabic: 'نسيان ومشاكل ذاكرة' },
-      { id: 's4', arabic: 'صداع متكرر' },
-      { id: 's5', arabic: 'ذهن ضبابي غير صافي' },
+      { id: 's1', label: 'Dizziness or balance problems' },
+      { id: 's2', label: 'Low focus and distraction' },
+      { id: 's3', label: 'Memory issues' },
+      { id: 's4', label: 'Frequent headache' },
+      { id: 's5', label: 'Brain fog' },
     ],
   },
   {
     id: 'energy', label: 'Energy & Sleep', icon: '⚡', color: '#E8FF4D',
     symptoms: [
-      { id: 's6',  arabic: 'إرهاق مزمن طول اليوم' },
-      { id: 's7',  arabic: 'بصحى من النوم تعبان' },
-      { id: 's8',  arabic: 'خمول شديد بعد الأكل' },
-      { id: 's9',  arabic: 'تقلبات مزاج وعصبية' },
-      { id: 's10', arabic: 'قلق أو أعراض اكتئاب' },
+      { id: 's6',  label: 'Chronic fatigue all day' },
+      { id: 's7',  label: 'Wake up tired' },
+      { id: 's8',  label: 'Low energy after meals' },
+      { id: 's9',  label: 'Mood swings and irritability' },
+      { id: 's10', label: 'Anxiety or low mood' },
     ],
   },
   {
     id: 'hair', label: 'Hair & Skin', icon: '💇', color: '#FF9D4D',
     symptoms: [
-      { id: 's11', arabic: 'تساقط شعر شديد ومستمر' },
-      { id: 's12', arabic: 'بشرة جافة وبتتقشر' },
-      { id: 's13', arabic: 'أظافر هشة وبتتكسر' },
-      { id: 's14', arabic: 'بشرة شاحبة وبلا إشراقة' },
-      { id: 's15', arabic: 'الجروح بتتأخر في الشفاء' },
+      { id: 's11', label: 'Severe ongoing hair loss' },
+      { id: 's12', label: 'Dry flaky skin' },
+      { id: 's13', label: 'Brittle nails' },
+      { id: 's14', label: 'Pale skin' },
+      { id: 's15', label: 'Slow wound healing' },
     ],
   },
   {
     id: 'muscles', label: 'Muscles & Bones', icon: '🦴', color: '#4DFF9E',
     symptoms: [
-      { id: 's16', arabic: 'تشنجات عضلية مؤلمة' },
-      { id: 's17', arabic: 'آلام في المفاصل' },
-      { id: 's18', arabic: 'ألم في العظام أو ضعفها' },
-      { id: 's19', arabic: 'ضعف عام في العضلات' },
-      { id: 's20', arabic: 'تحريك رجلين لا إرادي في الليل' },
+      { id: 's16', label: 'Painful muscle cramps' },
+      { id: 's17', label: 'Joint pain' },
+      { id: 's18', label: 'Bone pain or weakness' },
+      { id: 's19', label: 'General muscle weakness' },
+      { id: 's20', label: 'Restless legs at night' },
     ],
   },
 ];
 
 const DEFICIENCY_RULES = [
-  { nutrient: 'Vitamin D3', emoji: '☀️', symptom_ids: ['s6','s7','s9','s10','s17','s18','s4'], daily_dose: '2000–4000 IU/day', best_time: 'مع أكبر وجبة', warning: 'اعمل تحليل 25-OH Vitamin D الأول', egyptian_foods: ['سمك مملح','بيض كامل','كبدة','جبن رومي'], foods_emoji: ['🐟','🥚','🫀','🧀'], supplement_note: 'D3 + K2 مع بعض أحسن' },
-  { nutrient: 'Vitamin B12', emoji: '🔴', symptom_ids: ['s1','s2','s3','s5','s6','s7','s14','s19'], daily_dose: '1000 mcg/day', best_time: 'صبح على معدة فاضية', warning: 'ممكن يحتاج حقن — اعمل تحليل', egyptian_foods: ['كبدة بقري','بيض','جبن قريش','سردين'], foods_emoji: ['🫀','🥚','🧀','🐟'], supplement_note: 'Methylcobalamin أفضل' },
-  { nutrient: 'Iron', emoji: '🩸', symptom_ids: ['s1','s6','s7','s11','s14','s19','s4'], daily_dose: '18–27 mg/day', best_time: 'مع فيتامين C — قبل الأكل', warning: 'اعمل CBC وferritin الأول', egyptian_foods: ['كبدة','لحمة حمراء','فول مدمس','عدس'], foods_emoji: ['🫀','🥩','🫘','🌿'], supplement_note: 'خد مع عصير برتقان' },
-  { nutrient: 'Magnesium', emoji: '⚡', symptom_ids: ['s9','s10','s16','s17','s20','s4','s8'], daily_dose: '300–400 mg/day', best_time: 'الليل قبل النوم', warning: 'ابدأ بـ 200mg — الزيادة إسهال', egyptian_foods: ['لوز','طحينة','عدس','فول','موز'], foods_emoji: ['🌰','🫙','🌿','🫘','🍌'], supplement_note: 'Magnesium Glycinate أفضل' },
-  { nutrient: 'Zinc', emoji: '🦪', symptom_ids: ['s11','s13','s15','s19','s7'], daily_dose: '15–25 mg/day', best_time: 'مع الأكل', warning: 'مش تزيد عن 40mg يومياً', egyptian_foods: ['لحمة حمراء','كبدة','بذور قرع','بيض'], foods_emoji: ['🥩','🫀','🌻','🥚'], supplement_note: 'Zinc Picolinate أحسن امتصاصاً' },
-  { nutrient: 'Omega-3', emoji: '🐟', symptom_ids: ['s2','s5','s9','s10','s12','s17'], daily_dose: '1000–2000 mg/day', best_time: 'مع وجبة دسمة', warning: 'مميعات دم — استشر طبيب', egyptian_foods: ['سمك بلطي','سردين','تونة','جوز'], foods_emoji: ['🐟','🐟','🥫','🌰'], supplement_note: 'High EPA للمزاج، DHA للمخ' },
-  { nutrient: 'Biotin (B7)', emoji: '💇', symptom_ids: ['s11','s12','s13'], daily_dose: '2500–5000 mcg/day', best_time: 'أي وقت', warning: 'بيأثر على تحاليل الغدة — قول للدكتور', egyptian_foods: ['بيض (الصفار)','كبدة','لوز','جبن قريش'], foods_emoji: ['🥚','🫀','🌰','🧀'], supplement_note: 'النتيجة بعد 3-6 أشهر' },
+  { nutrient: 'Vitamin D3', emoji: '☀️', symptom_ids: ['s6','s7','s9','s10','s17','s18','s4'], daily_dose: '2000–4000 IU/day', best_time: 'With largest meal', warning: 'Check 25-OH Vitamin D level first', egyptian_foods: ['Salted fish','Whole eggs','Liver','Roman cheese'], foods_emoji: ['🐟','🥚','🫀','🧀'], supplement_note: 'D3 + K2 can be a good combination' },
+  { nutrient: 'Vitamin B12', emoji: '🔴', symptom_ids: ['s1','s2','s3','s5','s6','s7','s14','s19'], daily_dose: '1000 mcg/day', best_time: 'Morning on empty stomach', warning: 'May require injections, test first', egyptian_foods: ['Beef liver','Eggs','Cottage cheese','Sardines'], foods_emoji: ['🫀','🥚','🧀','🐟'], supplement_note: 'Methylcobalamin form is preferred' },
+  { nutrient: 'Iron', emoji: '🩸', symptom_ids: ['s1','s6','s7','s11','s14','s19','s4'], daily_dose: '18–27 mg/day', best_time: 'With Vitamin C before meals', warning: 'Check CBC and ferritin first', egyptian_foods: ['Liver','Red meat','Fava beans','Lentils'], foods_emoji: ['🫀','🥩','🫘','🌿'], supplement_note: 'Take with orange juice for better absorption' },
+  { nutrient: 'Magnesium', emoji: '⚡', symptom_ids: ['s9','s10','s16','s17','s20','s4','s8'], daily_dose: '300–400 mg/day', best_time: 'At night before sleep', warning: 'Start with 200mg, higher doses may cause diarrhea', egyptian_foods: ['Almonds','Tahini','Lentils','Fava beans','Bananas'], foods_emoji: ['🌰','🫙','🌿','🫘','🍌'], supplement_note: 'Magnesium Glycinate is preferred' },
+  { nutrient: 'Zinc', emoji: '🦪', symptom_ids: ['s11','s13','s15','s19','s7'], daily_dose: '15–25 mg/day', best_time: 'With food', warning: 'Do not exceed 40mg daily', egyptian_foods: ['Red meat','Liver','Pumpkin seeds','Eggs'], foods_emoji: ['🥩','🫀','🌻','🥚'], supplement_note: 'Zinc Picolinate has better absorption' },
+  { nutrient: 'Omega-3', emoji: '🐟', symptom_ids: ['s2','s5','s9','s10','s12','s17'], daily_dose: '1000–2000 mg/day', best_time: 'With a fatty meal', warning: 'Consult your doctor if using blood thinners', egyptian_foods: ['Tilapia','Sardines','Tuna','Walnuts'], foods_emoji: ['🐟','🐟','🥫','🌰'], supplement_note: 'High EPA supports mood, DHA supports brain health' },
+  { nutrient: 'Biotin (B7)', emoji: '💇', symptom_ids: ['s11','s12','s13'], daily_dose: '2500–5000 mcg/day', best_time: 'Any time', warning: 'Can affect thyroid lab results, tell your doctor', egyptian_foods: ['Egg yolk','Liver','Almonds','Cottage cheese'], foods_emoji: ['🥚','🫀','🌰','🧀'], supplement_note: 'Results usually appear after 3-6 months' },
 ];
 
 function analyzeSymptoms(selectedIds: string[]) {
@@ -505,7 +505,7 @@ export default function Profile() {
                     ]}
                     onPress={() => toggleSymptom(sym.id)}
                   >
-                    <Text style={[s.symptomAr2, { color: C.text }]}>{sym.arabic}</Text>
+                    <Text style={[s.symptomAr2, { color: C.text }]}>{sym.label}</Text>
                     <Text style={[s.metricVal, { color: C.text }]}>{selectedSymptoms.includes(sym.id) ? '✓' : ''}</Text>
                   </TouchableOpacity>
                 ))}

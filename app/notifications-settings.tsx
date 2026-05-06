@@ -92,10 +92,54 @@ export default function NotificationsSettingsScreen() {
           onChange={(v) => setSettings((p) => ({ ...p, meal_reminders: v }))}
           C={C}
         />
+        <InputRow
+          label="Breakfast time (HH:mm)"
+          value={settings.meal_breakfast_time}
+          onChange={(v) => setSettings((p) => ({ ...p, meal_breakfast_time: v }))}
+          C={C}
+        />
+        <InputRow
+          label="Lunch time (HH:mm)"
+          value={settings.meal_lunch_time}
+          onChange={(v) => setSettings((p) => ({ ...p, meal_lunch_time: v }))}
+          C={C}
+        />
+        <InputRow
+          label="Dinner time (HH:mm)"
+          value={settings.meal_dinner_time}
+          onChange={(v) => setSettings((p) => ({ ...p, meal_dinner_time: v }))}
+          C={C}
+        />
         <SettingRow
           label="Habit reduction reminders"
           value={settings.habit_reminders}
           onChange={(v) => setSettings((p) => ({ ...p, habit_reminders: v }))}
+          C={C}
+        />
+        <InputRow
+          label="Habit reminder time (HH:mm)"
+          value={settings.habit_reminder_time}
+          onChange={(v) => setSettings((p) => ({ ...p, habit_reminder_time: v }))}
+          C={C}
+        />
+        <SettingRow
+          label="Lab reminders"
+          value={settings.lab_reminders}
+          onChange={(v) => setSettings((p) => ({ ...p, lab_reminders: v }))}
+          C={C}
+        />
+        <InputRow
+          label="Lab reminder day (1-7)"
+          value={String(settings.lab_reminder_day_of_week)}
+          onChange={(v) =>
+            setSettings((p) => ({ ...p, lab_reminder_day_of_week: Math.max(1, Math.min(7, Number(v || 1))) }))
+          }
+          C={C}
+        />
+        <InputRow
+          label="Lab reminder time (HH:mm)"
+          value={settings.lab_reminder_time}
+          onChange={(v) => setSettings((p) => ({ ...p, lab_reminder_time: v }))}
           C={C}
         />
         <SettingRow

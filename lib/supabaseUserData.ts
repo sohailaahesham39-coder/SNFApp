@@ -93,16 +93,5 @@ export async function saveWorkoutWeekSupabaseFirst(days: boolean[]): Promise<voi
   await upsertAppStateField('workout_week_done', days);
 }
 
-export async function loadChatHistorySupabaseFirst<T>(): Promise<T[] | null> {
-  const userId = await getUserId();
-  if (!userId) return null;
-  const row = await loadAppStateRow(userId);
-  const value = row?.habit_progress?.chat_history;
-  if (!Array.isArray(value)) return null;
-  return value as T[];
-}
-
-export async function saveChatHistorySupabaseFirst<T>(messages: T[]): Promise<void> {
-  await upsertAppStateField('chat_history', messages);
-}
+// Chat history now uses dedicated public.chat_history via lib/chatHistory.ts.
 

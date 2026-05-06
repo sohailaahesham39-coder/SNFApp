@@ -9,7 +9,14 @@ export type UserNotificationSettings = {
   workout_reminders: boolean;
   workout_reminder_time: string;
   meal_reminders: boolean;
+  meal_breakfast_time: string;
+  meal_lunch_time: string;
+  meal_dinner_time: string;
   habit_reminders: boolean;
+  habit_reminder_time: string;
+  lab_reminders: boolean;
+  lab_reminder_day_of_week: number;
+  lab_reminder_time: string;
   push_enabled: boolean;
   fcm_token: string | null;
 };
@@ -22,7 +29,14 @@ export const DEFAULT_NOTIFICATION_SETTINGS: UserNotificationSettings = {
   workout_reminders: true,
   workout_reminder_time: '07:00',
   meal_reminders: true,
+  meal_breakfast_time: '08:30',
+  meal_lunch_time: '13:30',
+  meal_dinner_time: '20:00',
   habit_reminders: true,
+  habit_reminder_time: '16:00',
+  lab_reminders: true,
+  lab_reminder_day_of_week: 1,
+  lab_reminder_time: '10:00',
   push_enabled: true,
   fcm_token: null,
 };
@@ -77,7 +91,14 @@ export async function loadNotificationSettings(): Promise<UserNotificationSettin
     workout_reminders: Boolean(data.workout_reminders),
     workout_reminder_time: String(data.workout_reminder_time ?? '07:00').slice(0, 5),
     meal_reminders: Boolean(data.meal_reminders),
+    meal_breakfast_time: String(data.meal_breakfast_time ?? '08:30').slice(0, 5),
+    meal_lunch_time: String(data.meal_lunch_time ?? '13:30').slice(0, 5),
+    meal_dinner_time: String(data.meal_dinner_time ?? '20:00').slice(0, 5),
     habit_reminders: Boolean(data.habit_reminders),
+    habit_reminder_time: String(data.habit_reminder_time ?? '16:00').slice(0, 5),
+    lab_reminders: Boolean(data.lab_reminders ?? true),
+    lab_reminder_day_of_week: Math.min(7, Math.max(1, Number(data.lab_reminder_day_of_week ?? 1))),
+    lab_reminder_time: String(data.lab_reminder_time ?? '10:00').slice(0, 5),
     push_enabled: Boolean(data.push_enabled),
     fcm_token: data.fcm_token ? String(data.fcm_token) : null,
   };
@@ -148,19 +169,22 @@ export async function applyLocalNotificationSchedules(settings: UserNotification
     await scheduleDaily('Workout Reminder', 'Time to workout! 💪', settings.workout_reminder_time, 'workout');
   }
   if (settings.meal_reminders) {
-    await scheduleDaily('Breakfast Reminder', 'Breakfast time. Fuel your day! 🍳', '08:30', 'meal_breakfast');
-    await scheduleDaily('Lunch Reminder', 'Lunch time. Keep balanced nutrition! 🥗', '13:30', 'meal_lunch');
-    await scheduleDaily('Dinner Reminder', 'Dinner time. Keep it light and healthy! 🍽️', '20:00', 'meal_dinner');
+    await scheduleDaily('Breakfast Reminder', 'Breakfast time. Fuel your day! 🍳', settings.meal_breakfast_time, 'meal_breakfast');
+    await scheduleDaily('Lunch Reminder', 'Lunch time. Keep balanced nutrition! 🥗', settings.meal_lunch_time, 'meal_lunch');
+    await scheduleDaily('Dinner Reminder', 'Dinner time. Keep it light and healthy! 🍽️', settings.meal_dinner_time, 'meal_dinner');
   }
   if (settings.habit_reminders) {
     await scheduleDaily(
       'Habit Reminder',
       'Stay strong! Reduce your coffee today ☕',
-      '16:00',
+      settings.habit_reminder_time,
       'habit'
     );
   }
-  await scheduleWeeklyLabReminder(1, 10, 0);
+  if (settings.lab_reminders) {
+    const { hour, minute } = parseTime(settings.lab_reminder_time);
+    await scheduleWeeklyLabReminder(settings.lab_reminder_day_of_week, hour, minute);
+  }
 }
 
 export async function sendTestLocalNotification(): Promise<void> {

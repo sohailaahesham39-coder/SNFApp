@@ -454,19 +454,69 @@ export default function HealthTab() {
           </>
         )}
 
-        {/* Placeholder for other sections */}
         {activeSection === 'plan' && (
-          <View style={s.emptyState}>
-            <Text style={{ fontSize: 64 }}>📋</Text>
-            <Text style={[s.emptyTitle, { color: C.text }]}>10-Day Plan Coming Soon</Text>
-          </View>
+          <>
+            {!safePlan || safePlan.length === 0 ? (
+              <View style={s.emptyState}>
+                <Text style={{ fontSize: 64 }}>📋</Text>
+                <Text style={[s.emptyTitle, { color: C.text }]}>No 10-day plan generated yet</Text>
+                <Text style={[s.emptySub, { color: C.textMuted }]}>Refresh profile data and try again.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={[s.sectionTitle, { color: C.textMuted }]}>YOUR 10-DAY ACTION PLAN</Text>
+                {safePlan.map((day: any) => (
+                  <View key={day.day} style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+                    <Text style={[s.cardTitle, { color: C.text }]}>
+                      Day {day.day}: {day.theme}
+                    </Text>
+                    <Text style={[s.tipText, { color: C.textMuted, marginBottom: 8 }]}>
+                      Date: {day.date}
+                    </Text>
+                    {(day.tasks ?? []).slice(0, 6).map((task: any) => (
+                      <Text key={task.id} style={[s.tipText, { color: C.text }]}>
+                        {task.icon} {task.title} - {task.description}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
+              </>
+            )}
+          </>
         )}
 
         {activeSection === 'supplements' && (
-          <View style={s.emptyState}>
-            <Text style={{ fontSize: 64 }}>💊</Text>
-            <Text style={[s.emptyTitle, { color: C.text }]}>Supplements Guide Coming Soon</Text>
-          </View>
+          <>
+            <Text style={[s.sectionTitle, { color: C.textMuted }]}>SUPPLEMENT GUIDANCE</Text>
+            {deficiencies.length === 0 ? (
+              <View style={s.emptyState}>
+                <Text style={{ fontSize: 64 }}>💊</Text>
+                <Text style={[s.emptyTitle, { color: C.text }]}>No supplement recommendations right now</Text>
+              </View>
+            ) : (
+              deficiencies.map((def, idx) => (
+                <View key={idx} style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <Text style={[s.cardTitle, { color: C.text }]}>
+                    {def.emoji} {def.nutrient}
+                  </Text>
+                  {def.supplement ? (
+                    <>
+                      <Text style={[s.tipText, { color: C.text }]}>Dose: {def.supplement.dose}</Text>
+                      <Text style={[s.tipText, { color: C.text }]}>Timing: {def.supplement.timing}</Text>
+                      <Text style={[s.tipText, { color: C.text }]}>Duration: {def.supplement.duration}</Text>
+                    </>
+                  ) : (
+                    <Text style={[s.tipText, { color: '#FF9D4D' }]}>
+                      Lab testing first is recommended before supplement use.
+                    </Text>
+                  )}
+                  {(def.warnings ?? []).slice(0, 3).map((w: string, i: number) => (
+                    <Text key={i} style={[s.tipText, { color: C.textMuted }]}>- {w}</Text>
+                  ))}
+                </View>
+              ))
+            )}
+          </>
         )}
 
       </ScrollView>

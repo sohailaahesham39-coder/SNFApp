@@ -266,111 +266,43 @@ That means the current codebase is best treated as a **mobile prototype / client
 
 ---
 
-## شرح مبسط للطلاب — يقولو إيه لو الدكتور سأل؟
+## Student Quick Explanation
 
-الجزء ده معمول كـ **سكريبت شرح سريع** للطلبة عشان يفهموا الكود ويعرفوا يجاوبوا على أي سؤال بشكل مختصر وواضح.
+This section is a short script students can use to explain the project clearly during a review.
 
-### 1) التطبيق ده شغال إزاي؟
-- أول ما التطبيق يفتح، يروح على **Splash Screen**.
-- بعد كده يراجع هل فيه **profile محفوظ** ولا لأ.
-- لو فيه بيانات محفوظة، يدخل على **Home**.
-- لو مفيش، يروح لجزء الـ **Auth / Welcome**.
+### 1) How the app flow works
+- The app starts on a splash/loading path.
+- It checks whether a profile/session exists.
+- If profile data exists, it opens Home.
+- If not, it opens the Auth/Welcome flow.
 
-### 2) الجزء الأمامي Frontend فيه إيه؟
-- **`app/index.tsx`**  
-  ده شاشة البداية اللي فيها لوجو وحركة بسيطة، وبعدها بيدخل المستخدم للصفحة المناسبة.
-- **`app/(tabs)/_layout.tsx`**  
-  ده اللي عامل شريط التنقل بين الصفحات الأساسية: Home / Meals / Workout / Chat / Profile.
-- **`app/(tabs)/home.tsx`**  
-  دي الصفحة الرئيسية، بتعرض:
-  - التحية حسب الوقت
-  - السعرات اليومية
-  - الـ BMI
-  - الـ BMR و TDEE
-  - اقتراحات أكل وتمرين
-  - نصائح حسب الحالة الصحية
-- **`app/(tabs)/profile.tsx`**  
-  دي صفحة البروفايل، وبتعرض:
-  - بيانات المستخدم
-  - التحليل الطبي
-  - خطة العادات
-  - تحليل الأعراض
-  - إعدادات الثيم
-- **`app/(tabs)/workout.tsx`**  
-  دي صفحة التمارين، وبتعرض التمارين من الداتا المحلية وتفلترها حسب الصعوبة.
+### 2) What the frontend includes
+- **`app/index.tsx`**: initial entry and route handoff.
+- **`app/(tabs)/_layout.tsx`**: main tab navigation (Home, Meals, Workout, Chat, Profile).
+- **`app/(tabs)/home.tsx`**: greeting, calorie target, BMI/BMR/TDEE, meal/workout recommendations, health tips.
+- **`app/(tabs)/profile.tsx`**: user profile, analysis views, habit plans, symptom section, theme settings.
+- **`app/(tabs)/workout.tsx`**: workout list and filtering by difficulty and goal.
 
-### 3) الملفات اللي فيها المنطق والذكاء
-- **`data/userStore.ts`**  
-  ده مسؤول عن:
-  - حفظ البروفايل
-  - تحميله
-  - مسحه
-  - حساب BMI / BMR / TDEE / calories target
-- **`data/localData.ts`**  
-  ده فيه الداتا الجاهزة:
-  - meals
-  - workouts
-  - health conditions
-  - allergens
-  - chatbot responses
-- **`data/medicalEngine.ts`**  
-  ده الجزء الطبي، وفيه:
-  - قائمة الأمراض
-  - التحاليل المناسبة لكل حالة
-  - خطة 10 أيام آمنة
-  - تقييم الالتزام بالخطة
-- **`data/mlEngine.ts`**  
-  ده جزء الذكاء/الـ ML المحلي، وفيه:
-  - توصية وجبات
-  - توقع الوزن
-  - تصنيف نوع الدايت المناسب
-- **`data/habitPlan.ts`**  
-  ده بيعمل خطة عادات صحية للمستخدم حسب هدفه.
-- **`context/ThemeContext.tsx`**  
-  ده مسؤول عن:
-  - Dark Mode / Light Mode
-  - حفظ اختيار الثيم
-  - ألوان الواجهة
+### 3) Core logic files
+- **`data/userStore.ts`**: profile save/load/clear and BMI/BMR/TDEE/target calorie calculations.
+- **`data/localData.ts`**: base meals, workouts, health conditions, allergens, chatbot responses.
+- **`data/medicalEngine.ts`**: medical insights, condition/lab mapping, safe plans.
+- **`data/mlEngine.ts`**: local recommendation and prediction logic.
+- **`data/habitPlan.ts`**: habit reduction planning.
+- **`context/ThemeContext.tsx`**: dark/light mode, theme persistence, and colors.
 
-### 4) التطبيق ده بيعمل إيه عمليًا؟
-- يحفظ بيانات المستخدم محليًا.
-- يحسب له احتياجاته الغذائية.
-- يقترح أكل مناسب له.
-- يقترح تمارين مناسبة.
-- ينبهه لو فيه حالة صحية أو عرض ممكن يحتاج متابعة.
-- يجهز شكل أولي لذكاء اصطناعي ونظام متابعة.
+### 4) What the app currently does
+- Stores and reads user data locally (with Supabase-first integration in key flows).
+- Calculates calorie needs and fitness metrics.
+- Recommends meals and workouts.
+- Provides symptom/condition-based health guidance.
+- Includes AI chat and progress tracking foundations.
 
-### 5) إيه اللي ناقص عشان يبقى Full Project؟
-- Backend حقيقي
-- Login / Register بجزء JWT
-- Database
-- API endpoints
-- Chatbot فعلي
-- ربط الداتا كلها بالسيرفر بدل التخزين المحلي فقط
-
-### 6) لو الدكتور سأل “ليه عملتوا المشروع ده؟”
-ممكن الرد يكون:
-> عملنا التطبيق ده عشان يساعد المستخدم في الأكل الصحي والرياضة بشكل شخصي، ويأخذ في الاعتبار الحالة الصحية والحساسية والأهداف المختلفة، وكل ده بأسلوب بسيط يناسب المستخدم المصري.
-
-### 7) لو سأل “إيه المميز فيه؟”
-ممكن الرد يكون:
-- فيه **تخصيص** حسب الهدف والحالة الصحية.
-- فيه **داتا مصرية** في الأكل والبدائل.
-- فيه **حسابات تلقائية** للسعرات و BMI.
-- فيه **تحليل أعراض وحالات طبية**.
-- واجهته **موبايل بسيطة وسهلة**.
-
-### 8) لو سأل “إيه دور كل قسم بسرعة؟”
-- **Frontend**: شكل الصفحات والتنقل.
-- **Data**: المعلومات الجاهزة والرسائل.
-- **Engine**: الحسابات والتوصيات والتحليل.
-- **Context**: إعدادات الشكل والثيم.
-- **Storage**: حفظ واسترجاع بيانات المستخدم.
-
-### 9) ملخص سريع جدًا للحفظ
-> التطبيق عبارة عن مساعد غذائي ورياضي ذكي.  
-> الواجهة موجودة شغالة على Expo، والبيانات والحسابات كلها محلية حاليًا.  
-> الجزء الناقص هو الـ backend والـ database والـ auth عشان يبقى system كامل.
+### 5) What is required for full production maturity
+- Complete backend automation for push events and scheduled jobs.
+- Final native mobile messaging configuration per platform.
+- Full API/event layer for all notification scenarios.
+- Final migration from legacy/local fallback paths where needed.
 
 ## Summary
 
