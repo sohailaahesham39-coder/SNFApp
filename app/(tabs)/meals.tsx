@@ -4,9 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MEALS } from '../../data/localData';
-import { loadProfile, UserProfile } from '../../data/userStore';
+import { UserProfile } from '../../data/userStore';
 import { useTheme, useThemeColors } from '../../context/ThemeContext';
 import { getMeals } from '../../lib/database';
+import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
 
 const FILTERS = ['All','Breakfast','Lunch','Dinner','Snack'];
 const MEAL_COLORS: Record<string,string> = { Breakfast:'#E8FF4D', Lunch:'#4DFF9E', Dinner:'#9D8FFF', Snack:'#FF9D4D' };
@@ -21,7 +22,7 @@ export default function Meals() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProfile().then(setProfile);
+    loadProfileSupabaseFirst().then(setProfile);
     getMeals().then(data => {
       if (data && data.length > 0) {
         setMeals(data);

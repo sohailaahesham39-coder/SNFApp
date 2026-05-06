@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -11,8 +10,9 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { loadProfile, UserProfile } from '../../data/userStore';
+import { UserProfile } from '../../data/userStore';
 import { useThemeColors } from '../../context/ThemeContext';
+import { loadProfileSupabaseFirst, loadChatHistorySupabaseFirst, saveChatHistorySupabaseFirst } from '../../lib/supabaseUserData';
 
 interface Msg {
   id: string;
@@ -20,8 +20,6 @@ interface Msg {
   text: string;
   time: string;
 }
-
-const CHAT_HISTORY_KEY = 'sn_chat_history';
 
 const SUGGESTIONS = [
   'What should I eat today?',
@@ -204,17 +202,17 @@ export default function Chat() {
     (async () => {
       try {
         const [savedProfile, savedHistory] = await Promise.all([
-          loadProfile(),
-          AsyncStorage.getItem(CHAT_HISTORY_KEY),
+          loadProfileSupabaseFirst(),
+          loadChatHistorySupabaseFirst<Msg>(),
         ]);
 
         if (!mounted) return;
 
         setProfile(savedProfile);
 
-        if (savedHistory) {
+        if (savedHistory && savedHistory.length > 0) {
           try {
-            const parsed = JSON.parse(savedHistory) as Msg[];
+            const parsed = savedHistory as Msg[];
             if (Array.isArray(parsed) && parsed.length > 0) {
               setMsgs(parsed);
             } else {
@@ -270,7 +268,7 @@ export default function Chat() {
 
   useEffect(() => {
     if (!hydrated) return;
-    AsyncStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(msgs)).catch(() => {});
+    saveChatHistorySupabaseFirst(msgs).catch(() => {});
   }, [msgs, hydrated]);
 
   async function send(text: string) {

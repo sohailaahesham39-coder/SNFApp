@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { calculateBMI, calculateBMR, calculateTDEE, getTargetCalories } from '../../data/userStore';
 import { saveProfileLocallyAndPush } from '../../lib/profileSupabase';
+import { upsertOnboardingDataFromProfile } from '../../lib/supabaseUserData';
 
 const HEALTH_CONDITIONS = [
   { id: 1, name: 'Diabetes Type 2', icon: '💉' },
@@ -75,6 +76,13 @@ export default function Step4() {
     const tdee = calculateTDEE(bmr, activity);
     const targetCalories = getTargetCalories(tdee, goal);
     await saveProfileLocallyAndPush({
+      name, email, age, gender, height, weight, goal, activity,
+      conditions: conditions.filter(c => c !== 'None'),
+      allergens: allergens.filter(a => a !== 'None'),
+      habits: habits.filter(h => h !== 'None'),
+      bmi, bmr, tdee, targetCalories
+    });
+    await upsertOnboardingDataFromProfile({
       name, email, age, gender, height, weight, goal, activity,
       conditions: conditions.filter(c => c !== 'None'),
       allergens: allergens.filter(a => a !== 'None'),

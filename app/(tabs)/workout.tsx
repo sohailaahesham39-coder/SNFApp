@@ -3,36 +3,16 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WORKOUTS } from '../../data/localData';
-import { loadProfile, UserProfile } from '../../data/userStore';
+import { UserProfile } from '../../data/userStore';
 import { useTheme, useThemeColors } from '../../context/ThemeContext';
 import { getWorkouts } from '../../lib/database';
+import { loadProfileSupabaseFirst, loadWorkoutWeekSupabaseFirst, saveWorkoutWeekSupabaseFirst } from '../../lib/supabaseUserData';
 
 const DIFFS = ['All','Beginner','Intermediate'];
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const WEEK_KEY = 'sn_workout_week_done';
-
 function defaultWeek(): boolean[] {
   return [false, false, false, false, false, false, false];
-}
-
-async function loadWeekDone(): Promise<boolean[]> {
-  try {
-    const raw = await AsyncStorage.getItem(WEEK_KEY);
-    if (!raw) return defaultWeek();
-    const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed) && parsed.length === 7) {
-      return parsed.map(v => Boolean(v));
-    }
-  } catch {
-    /* ignore */
-  }
-  return defaultWeek();
-}
-
-async function saveWeekDone(days: boolean[]): Promise<void> {
-  await AsyncStorage.setItem(WEEK_KEY, JSON.stringify(days));
 }
 
 export default function Workout() {
@@ -44,7 +24,7 @@ export default function Workout() {
   const [weekDone, setWeekDone] = useState<boolean[]>(defaultWeek);
 
   useEffect(() => {
-    loadProfile().then(setProfile);
+    loadProfileSupabaseFirst().then(setProfile);
     getWorkouts().then(data => {
       if (data && data.length > 0) setWorkouts(data);
       else setWorkouts(WORKOUTS);
@@ -53,14 +33,16 @@ export default function Workout() {
 
   useFocusEffect(
     useCallback(() => {
-      loadWeekDone().then(setWeekDone);
+      loadWorkoutWeekSupabaseFirst().then((days) => {
+        setWeekDone(days ?? defaultWeek());
+      });
     }, []),
   );
 
   async function toggleDay(index: number) {
     const next = weekDone.map((v, i) => (i === index ? !v : v));
     setWeekDone(next);
-    await saveWeekDone(next);
+    await saveWorkoutWeekSupabaseFirst(next);
   }
 
   const filtered = workouts.filter(w => diff==='All' || w.difficulty===diff);

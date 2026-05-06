@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Refre
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { loadProfile, UserProfile, getBMICategory } from '../../data/userStore';
+import { UserProfile, getBMICategory } from '../../data/userStore';
 import { tryLogDailyProgressFromHome } from '../../lib/progressLog';
 import { MEALS, WORKOUTS } from '../../data/localData';
 import { useThemeColors } from '../../context/ThemeContext';
+import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
 
 const { width } = Dimensions.get('window');
 
@@ -146,7 +147,7 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
-    const p = await loadProfile();
+    const p = await loadProfileSupabaseFirst();
     if (!p) {
       router.replace('/(auth)/welcome');
       return;

@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  loadProfile, clearProfile, UserProfile, getBMICategory,
+  clearProfile, UserProfile, getBMICategory,
   calculateBMI, calculateBMR, calculateTDEE, getTargetCalories,
 } from '../../data/userStore';
 import { saveProfileLocallyAndPush } from '../../lib/profileSupabase';
@@ -18,6 +18,7 @@ import { LIGHT_PALETTE } from '../../constants/lightPalette';
 import { runMLEngine, MLSummary } from '../../data/mlEngine';
 import { generateHabitPlan, HabitPlan, HABIT_QUESTIONS } from '../../data/habitPlan';
 import { signOutRemoteSessions } from '../../lib/sessionCleanup';
+import { loadProfileSupabaseFirst, upsertOnboardingDataFromProfile } from '../../lib/supabaseUserData';
 
 const { width } = Dimensions.get('window');
 
@@ -173,6 +174,7 @@ export default function Profile() {
       targetCalories,
     };
     await saveProfileLocallyAndPush(next);
+    await upsertOnboardingDataFromProfile(next);
     setProfile(next);
     const mlResult = runMLEngine({
       weight: next.weight,
@@ -188,7 +190,7 @@ export default function Profile() {
   }
 
   useFocusEffect(useCallback(() => {
-    loadProfile().then(p => {
+    loadProfileSupabaseFirst().then(p => {
       if (!p) return;
       setProfile(p);
       const mlResult = runMLEngine({
@@ -212,7 +214,7 @@ export default function Profile() {
 
   async function handleExportData() {
     try {
-      const profile = await loadProfile();
+      const profile = await loadProfileSupabaseFirst();
       if (!profile) return;
 
       const dataToExport = {

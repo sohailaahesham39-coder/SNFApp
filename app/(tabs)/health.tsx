@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useTheme, useThemeColors } from '../../context/ThemeContext';
-import { loadProfile } from '../../data/userStore';
+import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
 import {
   generateDeficiencyAnalysisSheet,
   generateLabTestPlan,
@@ -34,7 +34,7 @@ export default function HealthTab() {
   }, []));
 
   async function loadData() {
-    const p = await loadProfile();
+    const p = await loadProfileSupabaseFirst();
     if (!p) {
       Alert.alert('Setup Required', 'Please complete health profile setup first.', [
         { text: 'Setup Now', onPress: () => router.push('/health-setup') },
