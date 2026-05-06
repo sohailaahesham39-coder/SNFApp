@@ -21,6 +21,8 @@ import { signOutRemoteSessions } from '../../lib/sessionCleanup';
 import { loadProfileSupabaseFirst, upsertOnboardingDataFromProfile } from '../../lib/supabaseUserData';
 import { supabase } from '../../lib/supabase';
 import { type UserHealthPlanRow } from '../../lib/healthPlans';
+import { cancelAllLocalNotifications } from '../../lib/localNotifications';
+import { clearPushTokenOnLogout } from '../../lib/pushNotifications';
 
 const { width } = Dimensions.get('window');
 
@@ -267,6 +269,8 @@ export default function Profile() {
           style: 'destructive',
           onPress: async () => {
             try {
+              await cancelAllLocalNotifications();
+              await clearPushTokenOnLogout();
               await signOutRemoteSessions();
               await AsyncStorage.clear();
               Alert.alert(
@@ -294,6 +298,8 @@ export default function Profile() {
           style: 'destructive',
           onPress: async () => {
             try {
+              await cancelAllLocalNotifications();
+              await clearPushTokenOnLogout();
               await signOutRemoteSessions();
               await AsyncStorage.clear();
               router.replace('/(auth)/welcome');
@@ -592,6 +598,12 @@ export default function Profile() {
       <Text style={[s.cardSub, { color: C.textMuted }]}>
         Tap Edit to change your details; use Save in the editor to store them on this device.
       </Text>
+      <TouchableOpacity
+        style={[s.btnSolid, { backgroundColor: C.card, borderColor: C.border, borderWidth: 1 }]}
+        onPress={() => router.push('/notifications-settings')}
+      >
+        <Text style={[s.btnSolidTxt, { color: C.text }]}>Notification settings</Text>
+      </TouchableOpacity>
       <TouchableOpacity
         style={[s.btnSolid, { backgroundColor: C.accent }]}
         onPress={openEditProfile}

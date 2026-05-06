@@ -6,6 +6,12 @@ import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile } from '../data/userStore';
 import { pullRemoteProfileIntoCache } from '../lib/profileSupabase';
+import {
+  applyLocalNotificationSchedules,
+  loadNotificationSettings,
+  requestLocalNotificationPermission,
+} from '../lib/localNotifications';
+import { setupPushNotifications } from '../lib/pushNotifications';
 
 function Inner() {
   const { isDark } = useTheme();
@@ -43,6 +49,25 @@ function Inner() {
       sub.remove();
     };
   }, [router]);
+
+  useEffect(() => {
+    const init = async () => {
+      const allowed = await requestLocalNotificationPermission();
+      if (allowed) {
+        const settings = await loadNotificationSettings();
+        await applyLocalNotificationSchedules(settings);
+      }
+      await setupPushNotifications((payload) => {
+        const target = payload.target;
+        if (typeof target === 'string' && target.startsWith('/')) {
+          router.push(target as never);
+        } else {
+          router.push('/(tabs)/home');
+        }
+      });
+    };
+    init().catch(() => {});
+  }, []);
 
   return (
     <>
