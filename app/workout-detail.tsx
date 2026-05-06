@@ -154,7 +154,7 @@ export default function WorkoutDetail() {
         <View style={[s.section, { backgroundColor: C.card, borderColor: C.border }]}>
           <Text style={[s.sectionTitle, { color: C.textMuted }]}>GOOD FOR</Text>
           <View style={s.tags}>
-            {workout.goal.map(g => (
+            {workout.goal.map((g: string) => (
               <View key={g} style={[s.tag, { backgroundColor: 'rgba(157,143,255,0.08)', borderColor: 'rgba(157,143,255,0.2)' }]}>
                 <Text style={[s.tagT, { color: '#9D8FFF' }]}>🎯 {g}</Text>
               </View>

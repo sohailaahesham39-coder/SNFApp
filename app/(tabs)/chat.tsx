@@ -8,11 +8,14 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserProfile } from '../../data/userStore';
 import { useThemeColors } from '../../context/ThemeContext';
-import { loadProfileSupabaseFirst, loadChatHistorySupabaseFirst, saveChatHistorySupabaseFirst } from '../../lib/supabaseUserData';
+import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
+import { appendChatMessage, clearChatHistory, loadChatHistory } from '../../lib/chatHistory';
+import { answerUserQuestionFromContext, loadChatContext, type ChatContext } from '../../lib/chatContext';
 
 interface Msg {
   id: string;
@@ -22,11 +25,15 @@ interface Msg {
 }
 
 const SUGGESTIONS = [
-  'What should I eat today?',
-  'Is coffee bad for me?',
-  'Best meal for diabetes?',
-  'How much water?',
-  'Workout for beginners?',
+  'What vitamins should I take today?',
+  'How many calories did I eat?',
+  "What's my water goal?",
+  'Show me my health plan',
+  'What exercises should I do?',
+  'What foods are good for my condition?',
+  'When should I do my lab tests?',
+  'How am I doing this week?',
+  'What habits should I reduce?',
 ];
 
 function getTime() {
@@ -89,6 +96,17 @@ GUIDELINES:
 10. Use emojis lightly, not excessively`;
 }
 
+function buildContextPrompt(context: ChatContext) {
+  return `LIVE USER DATA SUMMARY:
+- Calories today: ${context.caloriesEatenToday}/${context.caloriesGoalToday}
+- Water cups today: ${context.waterCupsToday}
+- Water goal ml: ${context.waterGoalMl}
+- Active plans: vitamin=${context.activePlans.vitamin.length}, lab=${context.activePlans.lab.length}, habit=${context.activePlans.habit.length}, water=${context.activePlans.water.length}
+- Pending lab tests: ${context.pendingLabTests}
+- Possible deficiencies count: ${context.deficienciesCount}
+- Weekly progress: ${context.weeklyProgressText}`;
+}
+
 function buildConversationHistory(msgs: Msg[]) {
   return msgs.slice(-8).map(m => ({
     role: m.role === 'user' ? 'user' : 'assistant',
@@ -148,6 +166,7 @@ function localReply(profile: UserProfile | null, text: string) {
 
 async function askAnthropic(
   profile: UserProfile | null,
+  context: ChatContext,
   msgs: Msg[],
   text: string,
   signal: AbortSignal
@@ -169,7 +188,7 @@ async function askAnthropic(
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 300,
-      system: buildProfilePrompt(profile),
+      system: `${buildProfilePrompt(profile)}\n\n${buildContextPrompt(context)}`,
       messages: [...buildConversationHistory(msgs), { role: 'user', content: text }],
     }),
   });
@@ -193,6 +212,7 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [chatContext, setChatContext] = useState<ChatContext | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -201,14 +221,20 @@ export default function Chat() {
 
     (async () => {
       try {
-        const [savedProfile, savedHistory] = await Promise.all([
-          loadProfileSupabaseFirst(),
-          loadChatHistorySupabaseFirst<Msg>(),
-        ]);
+        const savedProfile = await loadProfileSupabaseFirst();
+        const context = await loadChatContext(savedProfile);
+        const dbHistory = await loadChatHistory('default', 120);
+        const savedHistory = dbHistory.map((r) => ({
+          id: r.id,
+          role: r.role === 'assistant' ? 'bot' : r.role === 'user' ? 'user' : 'bot',
+          text: r.message,
+          time: new Date(r.created_at).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }),
+        })) as Msg[];
 
         if (!mounted) return;
 
         setProfile(savedProfile);
+        setChatContext(context);
 
         if (savedHistory && savedHistory.length > 0) {
           try {
@@ -266,11 +292,6 @@ export default function Chat() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    saveChatHistorySupabaseFirst(msgs).catch(() => {});
-  }, [msgs, hydrated]);
-
   async function send(text: string) {
     if (!text.trim() || typing) return;
 
@@ -285,6 +306,7 @@ export default function Chat() {
     setMsgs(prev => [...prev, userMsg]);
     setInput('');
     setTyping(true);
+    await appendChatMessage('user', cleanText, 'default');
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
@@ -292,7 +314,10 @@ export default function Chat() {
     const timeout = setTimeout(() => controller.abort(), 12000);
 
     try {
-      const botText = await askAnthropic(profile, [...msgs, userMsg], cleanText, controller.signal);
+      const latestContext = await loadChatContext(profile);
+      setChatContext(latestContext);
+      const contextAnswer = answerUserQuestionFromContext(cleanText, latestContext);
+      const botText = contextAnswer ?? await askAnthropic(profile, latestContext, [...msgs, userMsg], cleanText, controller.signal);
       setMsgs(prev => [
         ...prev,
         {
@@ -302,6 +327,7 @@ export default function Chat() {
           time: getTime(),
         },
       ]);
+      await appendChatMessage('assistant', botText, 'default');
     } catch (error) {
       const fallback = localReply(profile, cleanText);
       setMsgs(prev => [
@@ -313,11 +339,33 @@ export default function Chat() {
           time: getTime(),
         },
       ]);
+      await appendChatMessage('assistant', fallback, 'default', { source: 'fallback' });
     } finally {
       clearTimeout(timeout);
       setTyping(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
+  }
+
+  async function onClearChat() {
+    Alert.alert('Clear chat', 'This will delete your chat history from Supabase.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          await clearChatHistory('default');
+          const welcome = {
+            id: '1',
+            role: 'bot' as const,
+            time: getTime(),
+            text: buildWelcomeMessage(profile),
+          };
+          setMsgs([welcome]);
+          await appendChatMessage('assistant', welcome.text, 'default', { source: 'welcome' });
+        },
+      },
+    ]);
   }
 
   return (
@@ -335,12 +383,22 @@ export default function Chat() {
               <Text style={s.status}>Online · {profile ? `Knows your profile ✓` : 'Ready to help'}</Text>
             </View>
           </View>
+          <TouchableOpacity onPress={onClearChat} style={[s.clearBtn, { borderColor: C.border }]}>
+            <Text style={[s.clearBtnT, { color: C.textMuted }]}>Clear</Text>
+          </TouchableOpacity>
           {profile && (
             <View style={s.profileBadge}>
               <Text style={s.profileBadgeT}>{profile.name[0].toUpperCase()}</Text>
             </View>
           )}
         </View>
+        {!!chatContext && (
+          <View style={[s.summaryCard, { borderColor: C.border, backgroundColor: C.card }]}>
+            <Text style={[s.summaryT, { color: C.text }]}>
+              {chatContext.caloriesEatenToday}/{chatContext.caloriesGoalToday} kcal · {chatContext.waterCupsToday} cups · {chatContext.pendingLabTests} labs pending
+            </Text>
+          </View>
+        )}
 
         <ScrollView
           ref={scrollRef}
@@ -424,8 +482,12 @@ const s = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4DFF9E' },
   status: { fontSize: 11, color: '#4DFF9E' },
+  clearBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  clearBtnT: { fontSize: 11, fontWeight: '700' },
   profileBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(232,255,77,0.15)', borderWidth: 1.5, borderColor: '#E8FF4D', alignItems: 'center', justifyContent: 'center' },
   profileBadgeT: { fontSize: 14, fontWeight: '800', color: '#E8FF4D' },
+  summaryCard: { borderWidth: 1, borderRadius: 12, marginHorizontal: 16, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  summaryT: { fontSize: 12, fontWeight: '600' },
   msgs: { flex: 1 },
   msgsContent: { padding: 16, gap: 12, paddingBottom: 8 },
   msgWrap: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },

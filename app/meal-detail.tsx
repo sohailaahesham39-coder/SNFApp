@@ -383,7 +383,7 @@ export default function MealDetail() {
           <View style={[s.section, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[s.secTitle, { color: C.textMuted }]}>SUITABLE FOR</Text>
             <View style={s.tags}>
-              {meal.conditions_suitable.map(c => (
+              {meal.conditions_suitable.map((c: string) => (
                 <View key={c} style={[s.tag, { backgroundColor: 'rgba(77,255,158,0.08)', borderColor: 'rgba(77,255,158,0.2)' }]}>
                   <Text style={[s.tagT, { color: '#4DFF9E' }]}>✓ {c}</Text>
                 </View>

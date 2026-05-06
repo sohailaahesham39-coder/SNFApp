@@ -75,15 +75,15 @@ function filterMealsForUser(profile: UserProfile, mealsInput: any[]) {
 
     // avoid meals that conflict with conditions
     const avoid = meal.conditions_avoid ?? [];
-    const hasConflict = conditions.some(c =>
-      avoid.some(a => a.toLowerCase().includes(c.toLowerCase()))
+    const hasConflict = conditions.some((c: string) =>
+      avoid.some((a: string) => a.toLowerCase().includes(c.toLowerCase()))
     );
     if (hasConflict) score -= 20;
 
     // bonus if meal is suitable for user condition
     const suitable = meal.conditions_suitable ?? [];
-    const hasMatch = conditions.some(c =>
-      suitable.some(s => s.toLowerCase().includes(c.toLowerCase()))
+    const hasMatch = conditions.some((c: string) =>
+      suitable.some((s: string) => s.toLowerCase().includes(c.toLowerCase()))
     );
     if (hasMatch) score += 5;
 
