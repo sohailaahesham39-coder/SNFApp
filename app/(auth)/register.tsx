@@ -3,6 +3,14 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchSignInMethodsForEmail, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
+import { supabase } from '../../lib/supabase';
+import { isValidEmail } from '../../lib/authValidation';
+import FirebaseGoogleSignIn from '../../components/auth/FirebaseGoogleSignIn';
+import { signInWithOAuthProvider } from '../../lib/oauth';
+import { getFirebaseAuth, isFirebaseConfigured } from '../../lib/firebaseApp';
+import { findProfileByEmail, upsertProfileRow } from '../../lib/authProfileSync';
+import { migrateLocalDataToSupabaseAndCleanup } from '../../lib/localToSupabaseMigration';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -12,22 +20,110 @@ export default function Register() {
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [oauthBusy, setOauthBusy] = useState(false);
   const [error, setError] = useState('');
 
   async function handle() {
     if (!name || !email || !password) { setError('Please fill in all fields'); return; }
-    if (password !== confirm) { setError('Passwords do not match ❌'); return; }
+    if (!isValidEmail(email)) { setError('Please enter a valid email address'); return; }
+    if (password !== confirm) { setError('Passwords do not match'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true); setError('');
-    await AsyncStorage.setItem('sn_temp_user', JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase() }));
-    setLoading(false);
-    router.replace('/onboarding/step1');
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const existingProfile = await findProfileByEmail(normalizedEmail);
+      if (existingProfile) {
+        setError('This email is already registered. Please login.');
+        return;
+      }
+
+      if (isFirebaseConfigured()) {
+        const auth = getFirebaseAuth();
+        const methods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
+        if (methods.length > 0) {
+          setError('This email is already registered. Please login.');
+          return;
+        }
+      }
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: { data: { full_name: name.trim() } },
+      });
+
+      if (signUpError) {
+        const msg = (signUpError.message || '').toLowerCase();
+        if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+          setError('This email is already registered. Please log in.');
+        } else {
+          setError(signUpError.message || 'Sign up failed');
+        }
+        return;
+      }
+
+      // Keep Firebase account in sync for email/password flows.
+      if (isFirebaseConfigured()) {
+        const auth = getFirebaseAuth();
+        const methods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
+        if (methods.length === 0) {
+          await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+          await firebaseSignOut(auth).catch(() => undefined);
+        }
+      }
+
+      if (signUpData.user?.id) {
+        const { error: profileError } = await upsertProfileRow({
+          id: signUpData.user.id,
+          email: normalizedEmail,
+          fullName: name.trim(),
+          avatarUrl: '',
+          provider: 'email',
+        });
+        if (profileError) {
+          setError(profileError.message || 'Unable to save profile. Please try again.');
+          return;
+        }
+      }
+
+      if (!signUpData?.session) {
+        await AsyncStorage.setItem('sn_temp_user', JSON.stringify({ name: name.trim(), email: normalizedEmail }));
+        setError('Please verify your email first, then login.');
+        return;
+      }
+
+      await migrateLocalDataToSupabaseAndCleanup();
+      await AsyncStorage.setItem('sn_temp_user', JSON.stringify({ name: name.trim(), email: normalizedEmail }));
+      router.replace('/onboarding/step1');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unexpected error. Please try again.';
+      if (msg.toLowerCase().includes('already')) {
+        setError('This email is already registered. Please login.');
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function handleGoogle() {
-    await AsyncStorage.setItem('sn_temp_user', JSON.stringify({ name: 'Google User', email: 'google@gmail.com' }));
-    router.replace('/onboarding/step1');
+  async function handleAppleOAuth() {
+    setError('');
+    setOauthBusy(true);
+    try {
+      const { error: oauthError } = await signInWithOAuthProvider('apple');
+      if (oauthError) {
+        setError(oauthError.message || 'Apple sign up failed');
+      }
+    } catch {
+      setError('Unable to start Apple sign up right now.');
+    } finally {
+      setOauthBusy(false);
+    }
   }
+
+  const busy = loading || oauthBusy;
 
   return (
     <View style={s.container}>
@@ -70,18 +166,15 @@ export default function Register() {
 
           {!!error && <Text style={s.err}>{error}</Text>}
 
-          <TouchableOpacity style={s.btn} onPress={handle} disabled={loading}>
+          <TouchableOpacity style={s.btn} onPress={handle} disabled={busy}>
             <Text style={s.btnT}>{loading ? 'Creating...' : 'Create Account'}</Text>
           </TouchableOpacity>
 
           <View style={s.divider}><View style={s.divLine} /><Text style={s.divTxt}>or sign up with</Text><View style={s.divLine} /></View>
 
           <View style={s.socialRow}>
-            <TouchableOpacity style={s.socialBtn} onPress={handleGoogle}>
-              <Text style={s.socialIcon}>G</Text>
-              <Text style={s.socialTxt}>Google</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.socialBtn} onPress={handleGoogle}>
+            <FirebaseGoogleSignIn disabled={busy} onError={setError} intent="signUp" />
+            <TouchableOpacity style={s.socialBtn} onPress={() => handleAppleOAuth()} disabled={busy}>
               <Text style={s.socialIcon}>🍎</Text>
               <Text style={s.socialTxt}>Apple</Text>
             </TouchableOpacity>

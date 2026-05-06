@@ -1,24 +1,65 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { loadProfile } from '../data/userStore';
+import { supabase } from '../lib/supabase';
+import { pullRemoteProfileIntoCache } from '../lib/profileSupabase';
+import { fetchAllUserDataFromSupabase } from '../lib/userDataSync';
+import { migrateLocalDataToSupabaseAndCleanup } from '../lib/localToSupabaseMigration';
 
 export default function Splash() {
+  const router = useRouter();
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.85)).current;
+  const routeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 900, useNativeDriver: true }),
       Animated.spring(scale, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
-    const t = setTimeout(async () => {
-      const profile = await loadProfile();
-      router.replace(profile ? '/(tabs)/home' : '/(auth)/welcome');
-    }, 2500);
-    return () => clearTimeout(t);
-  }, []);
+
+    async function prepare() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          await migrateLocalDataToSupabaseAndCleanup();
+          await fetchAllUserDataFromSupabase();
+        }
+        await pullRemoteProfileIntoCache();
+        const profile = await loadProfile();
+
+        routeTimerRef.current = setTimeout(() => {
+          if (session && profile?.name?.trim()) {
+            router.replace('/(tabs)/home');
+          } else if (session && (!profile || !profile.name?.trim())) {
+            router.replace('/onboarding/step1');
+          } else {
+            router.replace('/(auth)/welcome');
+          }
+        }, 2000);
+      } catch (error) {
+        console.error('Splash error:', error);
+        router.replace('/(auth)/welcome');
+      }
+    }
+
+    prepare();
+
+    return () => {
+      if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+    };
+  }, [mounted, opacity, router, scale]);
 
   return (
     <View style={s.container}>

@@ -1,15 +1,23 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, Switch, Dimensions, ActivityIndicator
+  Alert, Switch, Dimensions, ActivityIndicator, Modal,
+  TextInput, KeyboardAvoidingView, Platform, Share,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { loadProfile, clearProfile, UserProfile, getBMICategory } from '../../data/userStore';
-import { useTheme, getColors } from '../../context/ThemeContext';
+import {
+  loadProfile, clearProfile, UserProfile, getBMICategory,
+  calculateBMI, calculateBMR, calculateTDEE, getTargetCalories,
+} from '../../data/userStore';
+import { saveProfileLocallyAndPush } from '../../lib/profileSupabase';
+import { useTheme, useThemeColors, type LightAccentPreset } from '../../context/ThemeContext';
+import { LIGHT_PALETTE } from '../../constants/lightPalette';
 import { runMLEngine, MLSummary } from '../../data/mlEngine';
 import { generateHabitPlan, HabitPlan, HABIT_QUESTIONS } from '../../data/habitPlan';
+import { signOutRemoteSessions } from '../../lib/sessionCleanup';
 
 const { width } = Dimensions.get('window');
 
@@ -78,9 +86,12 @@ function analyzeSymptoms(selectedIds: string[]) {
 // ── Sections ──────────────────────────────────────────────────
 type Section = 'stats' | 'insights' | 'habits' | 'symptoms' | 'settings';
 
+const GOALS: UserProfile['goal'][] = ['Weight Loss', 'Muscle Gain', 'Maintain'];
+const ACTIVITIES: UserProfile['activity'][] = ['sedentary', 'light', 'moderate', 'active', 'very_active'];
+
 export default function Profile() {
-  const { isDark, toggleTheme } = useTheme();
-  const C = getColors(isDark);
+  const { isDark, toggleTheme, lightAccent, setLightAccent } = useTheme();
+  const C = useThemeColors();
   const [profile, setProfile]     = useState<UserProfile | null>(null);
   const [activeSection, setActiveSection] = useState<Section>('stats');
   const [ml, setML]               = useState<MLSummary | null>(null);
@@ -92,6 +103,89 @@ export default function Profile() {
   const [analyzedSymptoms, setAnalyzedSymptoms] = useState(false);
   const [loadingAnalysis, setLoadingAnalysis]   = useState(false);
   const [activeDeficiency, setActiveDeficiency] = useState<string | null>(null);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editDraft, setEditDraft] = useState({
+    name: '',
+    email: '',
+    age: '',
+    weight: '',
+    height: '',
+    gender: 'male' as 'male' | 'female',
+    goal: 'Maintain' as UserProfile['goal'],
+    activity: 'moderate' as UserProfile['activity'],
+  });
+
+  function openEditProfile() {
+    if (!profile) return;
+    setEditDraft({
+      name: profile.name,
+      email: profile.email,
+      age: String(profile.age),
+      weight: String(profile.weight),
+      height: String(profile.height),
+      gender: profile.gender,
+      goal: profile.goal,
+      activity: profile.activity,
+    });
+    setShowEditProfile(true);
+  }
+
+  async function saveEditedProfile() {
+    if (!profile) return;
+    const w = parseFloat(editDraft.weight.replace(',', '.'));
+    const h = parseFloat(editDraft.height.replace(',', '.'));
+    const ag = parseInt(editDraft.age, 10);
+    if (
+      !editDraft.name.trim() ||
+      !editDraft.email.trim() ||
+      Number.isNaN(w) ||
+      Number.isNaN(h) ||
+      Number.isNaN(ag)
+    ) {
+      Alert.alert('Check fields', 'Please fill name, email, age, height, and weight with valid numbers.');
+      return;
+    }
+    if (ag < 10 || ag > 120 || h < 50 || h > 260 || w < 20 || w > 400) {
+      Alert.alert('Check values', 'Age, height, or weight looks out of range.');
+      return;
+    }
+    const bmi = calculateBMI(w, h);
+    const bmr = calculateBMR(w, h, ag, editDraft.gender);
+    const tdee = calculateTDEE(bmr, editDraft.activity);
+    const targetCalories = getTargetCalories(tdee, editDraft.goal);
+    const next: UserProfile = {
+      ...profile,
+      name: editDraft.name.trim(),
+      email: editDraft.email.trim(),
+      age: ag,
+      gender: editDraft.gender,
+      weight: w,
+      height: h,
+      goal: editDraft.goal,
+      activity: editDraft.activity,
+      bmi,
+      bmr,
+      tdee,
+      targetCalories,
+    };
+    await saveProfileLocallyAndPush(next);
+    setProfile(next);
+    const mlResult = runMLEngine({
+      weight: next.weight,
+      targetCalories: next.targetCalories,
+      goal: next.goal,
+      activity: next.activity,
+      age: next.age,
+      bmi: next.bmi,
+      conditions: next.conditions ?? [],
+    });
+    setML(mlResult);
+    setShowEditProfile(false);
+  }
 
   useFocusEffect(useCallback(() => {
     loadProfile().then(p => {
@@ -116,11 +210,85 @@ export default function Profile() {
     });
   }, []));
 
-  function handleLogout() {
-    Alert.alert('Logout', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: async () => { await clearProfile(); router.replace('/(auth)/welcome'); } },
-    ]);
+  async function handleExportData() {
+    try {
+      const profile = await loadProfile();
+      if (!profile) return;
+
+      const dataToExport = {
+        profile,
+        exportDate: new Date().toISOString(),
+        version: '1.0.0',
+      };
+
+      const payload = JSON.stringify(dataToExport, null, 2);
+      await Share.share({
+        title: 'Smart Nutrition export',
+        message: payload.length > 12000 ? `${payload.slice(0, 12000)}\n\n… (truncated for share)` : payload,
+      }).catch(() => {
+        Alert.alert(
+          'Export Data',
+          'Sharing failed. Copy from logs or try again.',
+          [{ text: 'OK' }]
+        );
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to export data');
+    }
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Delete Account?',
+      'This will permanently delete all your data. This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOutRemoteSessions();
+              await AsyncStorage.clear();
+              Alert.alert(
+                'Local data cleared',
+                'Signed out and removed data from this device. Delete the Supabase user from the Dashboard if needed.',
+                [{ text: 'OK', onPress: () => router.replace('/(auth)/welcome') }],
+              );
+            } catch {
+              Alert.alert('Error', 'Could not finish sign-out. Try again.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleLogout() {
+    Alert.alert(
+      'Logout?',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOutRemoteSessions();
+              await AsyncStorage.clear();
+              router.replace('/(auth)/welcome');
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   }
 
   function toggleSymptom(id: string) {
@@ -142,7 +310,7 @@ export default function Profile() {
 
   if (!profile) return (
     <View style={[s.container, { backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' }]}>
-      <ActivityIndicator color="#E8FF4D" />
+      <ActivityIndicator color={C.accent} />
     </View>
   );
 
@@ -161,21 +329,18 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: C.bg }]} edges={['top']}>
-      <LinearGradient
-        colors={isDark ? ['#050505', '#080f06'] : ['#F0F4F0', '#FFFFFF']}
-        style={StyleSheet.absoluteFill}
-      />
+      <LinearGradient colors={[C.gradStart, C.gradEnd]} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.avatarSec}>
-          <View style={s.avatarRing}>
-            <View style={s.avatar}>
-              <Text style={s.avatarT}>{profile.name.charAt(0)}</Text>
+          <View style={[s.avatarRing, { backgroundColor: C.accent + '22' }]}>
+            <View style={[s.avatar, { backgroundColor: C.accent + '15' }]}>
+              <Text style={[s.avatarT, { color: C.accent }]}>{profile.name.charAt(0)}</Text>
             </View>
           </View>
           <Text style={[s.pName, { color: C.text }]}>{profile.name}</Text>
           <Text style={[s.pEmail, { color: C.textMuted }]}>{profile.email}</Text>
-          <View style={[s.goalBadge, { borderColor: C.border }]}> 
-            <Text style={s.goalBadgeT}>{profile.goal}</Text>
+          <View style={[s.goalBadge, { borderColor: C.border, backgroundColor: C.accent + '14' }]}> 
+            <Text style={[s.goalBadgeT, { color: C.accent }]}>{profile.goal}</Text>
           </View>
         </View>
 
@@ -308,11 +473,14 @@ export default function Profile() {
                 ))}
               </View>
             ))}
-            <TouchableOpacity style={s.analyzeBtn} onPress={runSymptomAnalysis}>
+            <TouchableOpacity
+              style={[s.analyzeBtn, { backgroundColor: C.accent }]}
+              onPress={runSymptomAnalysis}
+            >
               {loadingAnalysis ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={C.onAccent} />
               ) : (
-                <Text style={s.analyzeBtnT}>Analyze Symptoms</Text>
+                <Text style={[s.analyzeBtnT, { color: C.onAccent }]}>Analyze Symptoms</Text>
               )}
             </TouchableOpacity>
             {analyzedSymptoms && activeDeficiencyData ? (
@@ -325,17 +493,519 @@ export default function Profile() {
         )}
 
         {activeSection === 'settings' && (
-          <View style={[s.card, { borderColor: C.border, backgroundColor: C.bg2 }]}> 
-            <Text style={[s.cardLbl, { color: C.text }]}>Settings</Text>
-            <View style={s.metricRow}>
-              <Text style={[s.metricLbl, { color: C.text }]}>Dark mode</Text>
-              <Switch value={isDark} onValueChange={toggleTheme} />
-            </View>
-            <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
-              <Text style={s.logoutT}>Logout</Text>
-            </TouchableOpacity>
+  <>
+    {/* Appearance */}
+    <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+      <Text style={[s.cardTitle, { color: C.text }]}>Appearance</Text>
+      <View style={[s.settingRow, { borderBottomColor: C.border }]}>
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>{isDark ? '🌙' : '☀️'}</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>Dark mode</Text>
+        </View>
+        <Switch
+          value={isDark}
+          onValueChange={() => toggleTheme()}
+          trackColor={{ false: LIGHT_PALETTE.mint + '88', true: '#333' }}
+          thumbColor={isDark ? C.accent : LIGHT_PALETTE.pear}
+        />
+      </View>
+      {!isDark && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+          <Text style={[s.accentHint, { color: C.textMuted }]}>
+            Light theme accents (Crema and Mint stay as base; pick primary highlight):
+          </Text>
+          <View style={s.accentRow}>
+            {(
+              [
+                { id: 'pear' as LightAccentPreset, label: 'Pear', color: LIGHT_PALETTE.pear },
+                { id: 'tomato' as LightAccentPreset, label: 'Tomato', color: LIGHT_PALETTE.tomato },
+                { id: 'mint' as LightAccentPreset, label: 'Mint', color: LIGHT_PALETTE.mint },
+              ] as const
+            ).map(opt => {
+              const sel = lightAccent === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[
+                    s.accentChip,
+                    {
+                      borderColor: sel ? opt.color : C.border,
+                      backgroundColor: sel ? opt.color + '28' : 'transparent',
+                    },
+                  ]}
+                  onPress={() => setLightAccent(opt.id)}
+                >
+                  <View style={[s.accentSwatch, { backgroundColor: opt.color }]} />
+                  <Text style={[s.accentChipLbl, { color: C.text }]}>{opt.label}</Text>
+                  {sel ? <Text style={{ color: opt.color }}>✓</Text> : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        )}
+          <View style={s.paletteLegend}>
+            <Text style={[s.paletteLegendT, { color: C.textDim }]}>Pear {LIGHT_PALETTE.pear}</Text>
+            <Text style={[s.paletteLegendT, { color: C.textDim }]}>Tomato {LIGHT_PALETTE.tomato}</Text>
+          </View>
+          <View style={s.paletteLegend}>
+            <Text style={[s.paletteLegendT, { color: C.textDim }]}>Crema {LIGHT_PALETTE.crema}</Text>
+            <Text style={[s.paletteLegendT, { color: C.textDim }]}>Mint {LIGHT_PALETTE.mint}</Text>
+          </View>
+        </View>
+      )}
+    </View>
+
+    {/* Profile (edit / save flow) */}
+    <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+      <Text style={[s.cardTitle, { color: C.text }]}>My profile</Text>
+      <Text style={[s.cardSub, { color: C.textMuted }]}>
+        Tap Edit to change your details; use Save in the editor to store them on this device.
+      </Text>
+      <TouchableOpacity
+        style={[s.btnSolid, { backgroundColor: C.accent }]}
+        onPress={openEditProfile}
+      >
+        <Text style={[s.btnSolidTxt, { color: C.onAccent }]}>Edit profile</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* App & legal */}
+    <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+      <Text style={[s.cardTitle, { color: C.text }]}>App & Legal</Text>
+      
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomColor: C.border }]}
+        onPress={() => setShowPrivacyPolicy(true)}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>🔒</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>Privacy Policy</Text>
+        </View>
+        <Text style={[s.settingArrow, { color: C.textMuted }]}>›</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomColor: C.border }]}
+        onPress={() => setShowTerms(true)}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>📜</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>Terms & Conditions</Text>
+        </View>
+        <Text style={[s.settingArrow, { color: C.textMuted }]}>›</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomColor: C.border }]}
+        onPress={() => setShowAbout(true)}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>ℹ️</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>About App</Text>
+        </View>
+        <Text style={[s.settingArrow, { color: C.textMuted }]}>›</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomColor: C.border }]}
+        onPress={() => setShowHelp(true)}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>❓</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>Help & FAQ</Text>
+        </View>
+        <Text style={[s.settingArrow, { color: C.textMuted }]}>›</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomWidth: 0 }]}
+        onPress={() => {
+          Alert.alert(
+            'App Version',
+            'Smart Nutrition & Fitness v1.0.0\n\nBuilt with love by Team SNF\nCIC Graduation Project 2025',
+            [{ text: 'OK' }]
+          );
+        }}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>📱</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>Version</Text>
+        </View>
+        <Text style={[s.settingValue, { color: C.textMuted }]}>1.0.0</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Data Management */}
+    <View style={[s.card, { backgroundColor: C.card, borderColor: C.border }]}>
+      <Text style={[s.cardTitle, { color: C.text }]}>Data Management</Text>
+      
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomColor: C.border }]}
+        onPress={handleExportData}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>📤</Text>
+          <Text style={[s.settingLabel, { color: C.text }]}>Export My Data</Text>
+        </View>
+        <Text style={[s.settingArrow, { color: C.textMuted }]}>›</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[s.settingRow, { borderBottomWidth: 0 }]}
+        onPress={handleDeleteAccount}
+      >
+        <View style={s.settingLeft}>
+          <Text style={s.settingIcon}>🗑️</Text>
+          <Text style={[s.settingLabel, { color: C.danger }]}>Delete Account</Text>
+        </View>
+        <Text style={[s.settingArrow, { color: C.textMuted }]}>›</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Logout */}
+    <TouchableOpacity
+      style={[s.logoutBtn, { backgroundColor: C.danger + '22', borderColor: C.danger + '55' }]}
+      onPress={handleLogout}
+    >
+      <Text style={[s.logoutText, { color: C.danger }]}>Logout</Text>
+    </TouchableOpacity>
+
+    {/* Privacy Policy Modal */}
+    <Modal visible={showPrivacyPolicy} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={[s.modalContainer, { backgroundColor: C.bg }]} edges={['top']}>
+        <View style={[s.modalHeader, { borderBottomColor: C.border }]}>
+          <Text style={[s.modalTitle, { color: C.text }]}>Privacy Policy</Text>
+          <TouchableOpacity onPress={() => setShowPrivacyPolicy(false)}>
+            <Text style={[s.modalClose, { color: C.accent }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={s.modalContent}>
+          <Text style={[s.modalText, { color: C.text }]}>
+            <Text style={{ fontWeight: '800' }}>Effective Date:</Text> January 2025{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>1. Information We Collect{'\n'}</Text>
+            We collect information you provide directly to us, including:{'\n'}
+            • Personal information (name, age, gender, height, weight){'\n'}
+            • Health data (chronic conditions, symptoms, lab test results){'\n'}
+            • Dietary preferences and meal logs{'\n'}
+            • Exercise data and fitness goals{'\n'}
+            • Chat conversations with our AI assistant{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>2. How We Use Your Information{'\n'}</Text>
+            We use your information to:{'\n'}
+            • Provide personalized nutrition and fitness recommendations{'\n'}
+            • Generate health analysis reports and lab test suggestions{'\n'}
+            • Track your progress toward your health goals{'\n'}
+            • Improve our AI models and app features{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>3. Data Storage & Security{'\n'}</Text>
+            • All data is encrypted in transit and at rest{'\n'}
+            • We use Supabase for secure cloud storage{'\n'}
+            • Health data is stored in compliance with HIPAA guidelines{'\n'}
+            • We never sell your personal information to third parties{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>4. Your Rights{'\n'}</Text>
+            You have the right to:{'\n'}
+            • Access your personal data at any time{'\n'}
+            • Export your data in a portable format{'\n'}
+            • Request deletion of your account and all associated data{'\n'}
+            • Opt out of data collection for AI training{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>5. Third-Party Services{'\n'}</Text>
+            We use the following third-party services:{'\n'}
+            • Supabase (database hosting){'\n'}
+            • Anthropic Claude API (AI chat assistance){'\n'}
+            • Expo (app framework){'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>6. Contact Us{'\n'}</Text>
+            If you have questions about this Privacy Policy, please contact us:{'\n'}
+            • Email: privacy@snfapp.com{'\n'}
+            • Team: CIC Graduation Project 2025{'\n'}
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+
+    {/* Terms & Conditions Modal */}
+    <Modal visible={showTerms} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={[s.modalContainer, { backgroundColor: C.bg }]} edges={['top']}>
+        <View style={[s.modalHeader, { borderBottomColor: C.border }]}>
+          <Text style={[s.modalTitle, { color: C.text }]}>Terms & Conditions</Text>
+          <TouchableOpacity onPress={() => setShowTerms(false)}>
+            <Text style={[s.modalClose, { color: C.accent }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={s.modalContent}>
+          <Text style={[s.modalText, { color: C.text }]}>
+            <Text style={{ fontWeight: '800' }}>Last updated:</Text> January 2025{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>1. Agreement{'\n'}</Text>
+            By using Smart Nutrition & Fitness (&quot;SNF&quot;, &quot;the App&quot;) you agree to these Terms and
+            Conditions. If you disagree, please do not use the App.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>2. Not medical advice{'\n'}</Text>
+            SNF provides general wellness information only. It does not replace diagnosis or treatment by a
+            licensed healthcare professional. Always consult your doctor before changing diet, exercise, or
+            supplements—especially if you are pregnant, nursing, or have a medical condition.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>3. Use of the App{'\n'}</Text>
+            You agree to use the App lawfully and not to misuse or attempt to reverse engineer it. You are
+            responsible for the accuracy of information you enter.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>4. Accounts & data{'\n'}</Text>
+            You are responsible for safeguarding your device and any sign-in methods you use. You may export or
+            request deletion of local data as described in the Privacy Policy where applicable.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>5. Third-party services{'\n'}</Text>
+            The App may rely on third-party providers (e.g. authentication, analytics, or AI APIs). Their terms
+            may also apply.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>6. Limitation of liability{'\n'}</Text>
+            To the maximum extent permitted by law, the SNF team is not liable for any indirect or consequential
+            damages arising from your use of the App.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>7. Contact{'\n'}</Text>
+            Questions about these terms: legal@snfapp.com (placeholder — replace with your official contact).
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+
+    {/* Edit profile Modal */}
+    <Modal visible={showEditProfile} animationType="slide" presentationStyle="pageSheet">
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: C.bg }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <SafeAreaView style={[s.modalContainer, { backgroundColor: C.bg }]} edges={['top']}>
+          <View style={[s.modalHeader, { borderBottomColor: C.border }]}>
+            <View style={s.modalHeaderSide}>
+              <TouchableOpacity onPress={() => setShowEditProfile(false)} hitSlop={12}>
+                <Text style={[s.modalClose, { color: C.textMuted }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[s.modalTitle, { color: C.text, flex: 2, textAlign: 'center' }]}>Edit profile</Text>
+            <View style={[s.modalHeaderSide, { alignItems: 'flex-end' }]}>
+              <TouchableOpacity onPress={saveEditedProfile} hitSlop={12}>
+                <Text style={[s.modalClose, { color: C.accent }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <ScrollView contentContainerStyle={s.editScroll} keyboardShouldPersistTaps="handled">
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Name</Text>
+            <TextInput
+              style={[s.editInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+              value={editDraft.name}
+              onChangeText={t => setEditDraft(prev => ({ ...prev, name: t }))}
+              placeholder="Your name"
+              placeholderTextColor={C.textDim}
+            />
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Email</Text>
+            <TextInput
+              style={[s.editInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+              value={editDraft.email}
+              onChangeText={t => setEditDraft(prev => ({ ...prev, email: t }))}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholder="your@email.com"
+              placeholderTextColor={C.textDim}
+            />
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Age</Text>
+            <TextInput
+              style={[s.editInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+              value={editDraft.age}
+              onChangeText={t => setEditDraft(prev => ({ ...prev, age: t }))}
+              keyboardType="number-pad"
+              placeholder="Years"
+              placeholderTextColor={C.textDim}
+            />
+            <View style={s.genderRow}>
+              <TouchableOpacity
+                style={[
+                  s.genderChip,
+                  { borderColor: C.border, backgroundColor: editDraft.gender === 'male' ? C.accent + '44' : C.card },
+                ]}
+                onPress={() => setEditDraft(prev => ({ ...prev, gender: 'male' }))}
+              >
+                <Text style={[s.genderChipT, { color: C.text }]}>Male</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  s.genderChip,
+                  { borderColor: C.border, backgroundColor: editDraft.gender === 'female' ? C.accent + '44' : C.card },
+                ]}
+                onPress={() => setEditDraft(prev => ({ ...prev, gender: 'female' }))}
+              >
+                <Text style={[s.genderChipT, { color: C.text }]}>Female</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Height (cm)</Text>
+            <TextInput
+              style={[s.editInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+              value={editDraft.height}
+              onChangeText={t => setEditDraft(prev => ({ ...prev, height: t }))}
+              keyboardType="decimal-pad"
+            />
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Weight (kg)</Text>
+            <TextInput
+              style={[s.editInput, { color: C.text, borderColor: C.border, backgroundColor: C.card }]}
+              value={editDraft.weight}
+              onChangeText={t => setEditDraft(prev => ({ ...prev, weight: t }))}
+              keyboardType="decimal-pad"
+            />
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Goal</Text>
+            <View style={s.chipWrap}>
+              {GOALS.map(g => (
+                <TouchableOpacity
+                  key={g}
+                  style={[
+                    s.goalChip,
+                    {
+                      borderColor: C.border,
+                      backgroundColor: editDraft.goal === g ? C.accent + '55' : C.card,
+                    },
+                  ]}
+                  onPress={() => setEditDraft(prev => ({ ...prev, goal: g }))}
+                >
+                  <Text style={[s.goalChipT, { color: C.text }]}>{g}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={[s.editLbl, { color: C.textMuted }]}>Activity level</Text>
+            <View style={s.chipWrap}>
+              {ACTIVITIES.map(a => (
+                <TouchableOpacity
+                  key={a}
+                  style={[
+                    s.goalChip,
+                    {
+                      borderColor: C.border,
+                      backgroundColor: editDraft.activity === a ? C.accent + '55' : C.card,
+                    },
+                  ]}
+                  onPress={() => setEditDraft(prev => ({ ...prev, activity: a }))}
+                >
+                  <Text style={[s.goalChipT, { color: C.text }]}>{a.replace('_', ' ')}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
+    </Modal>
+
+    {/* About Modal */}
+    <Modal visible={showAbout} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={[s.modalContainer, { backgroundColor: C.bg }]} edges={['top']}>
+        <View style={[s.modalHeader, { borderBottomColor: C.border }]}>
+          <Text style={[s.modalTitle, { color: C.text }]}>About App</Text>
+          <TouchableOpacity onPress={() => setShowAbout(false)}>
+            <Text style={[s.modalClose, { color: C.accent }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={s.modalContent}>
+          <View style={{ alignItems: 'center', marginBottom: 24 }}>
+            <Text style={{ fontSize: 64, marginBottom: 12 }}>🥗</Text>
+            <Text style={[{ fontSize: 24, fontWeight: '900', color: C.text, marginBottom: 4 }]}>
+              Smart Nutrition & Fitness
+            </Text>
+            <Text style={[{ fontSize: 16, color: C.textMuted }]}>Version 1.0.0</Text>
+          </View>
+
+          <Text style={[s.modalText, { color: C.text }]}>
+            <Text style={{ fontWeight: '800' }}>About This App{'\n'}</Text>
+            Smart Nutrition & Fitness (SNF) is your personal AI-powered health companion. We combine advanced machine learning with personalized nutrition and fitness guidance to help you achieve your health goals.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Key Features:{'\n'}</Text>
+            • AI-powered meal recommendations{'\n'}
+            • Personalized workout plans{'\n'}
+            • Health analysis and deficiency detection{'\n'}
+            • Lab test planning and interpretation{'\n'}
+            • Habit reduction programs{'\n'}
+            • 10-day safe health plans{'\n'}
+            • Real-time chat with AI nutritionist{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Development Team:{'\n'}</Text>
+            • Team Leader: Mariam Rabea{'\n'}
+            • Team Size: 7 members{'\n'}
+            • Supervisor: Dr. Eman Elsayed{'\n'}
+            • Teaching Assistant: Yomna Eldeeb{'\n'}
+            • Institution: CIC (Canadian International College){'\n'}
+            • Project: Graduation Project 2025{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Technology Stack:{'\n'}</Text>
+            • React Native with Expo{'\n'}
+            • Supabase (Backend & Database){'\n'}
+            • Anthropic Claude API (AI Chat){'\n'}
+            • Machine Learning (KNN, Linear Regression, Decision Trees){'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Contact Us:{'\n'}</Text>
+            • Email: support@snfapp.com{'\n'}
+            • GitHub: github.com/snf-team{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Credits:{'\n'}</Text>
+            Built with ❤️ in Egypt 🇪🇬{'\n'}
+            © 2025 SNF Team. All rights reserved.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+
+    {/* Help & FAQ Modal */}
+    <Modal visible={showHelp} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={[s.modalContainer, { backgroundColor: C.bg }]} edges={['top']}>
+        <View style={[s.modalHeader, { borderBottomColor: C.border }]}>
+          <Text style={[s.modalTitle, { color: C.text }]}>Help & FAQ</Text>
+          <TouchableOpacity onPress={() => setShowHelp(false)}>
+            <Text style={[s.modalClose, { color: C.accent }]}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={s.modalContent}>
+          <Text style={[s.modalText, { color: C.text }]}>
+            <Text style={{ fontWeight: '800', fontSize: 18 }}>Frequently Asked Questions{'\n\n'}</Text>
+
+            <Text style={{ fontWeight: '800' }}>Q: How does the AI meal recommendation work?{'\n'}</Text>
+            A: We use K-Nearest Neighbors (KNN) machine learning to analyze your profile (age, weight, goal, activity level) and recommend meals similar to what worked for users with similar profiles.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: Is my health data safe?{'\n'}</Text>
+            A: Yes! All data is encrypted and stored securely in Supabase. We never sell your data to third parties. See our Privacy Policy for details.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: Can I use the app offline?{'\n'}</Text>
+            A: Most features work offline. However, AI chat requires internet connection to access Claude API.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: How accurate are the lab test recommendations?{'\n'}</Text>
+            A: Our recommendations are based on medical guidelines and your symptoms/conditions. However, always consult with a licensed doctor before making health decisions.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: Can I track multiple health conditions?{'\n'}</Text>
+            A: Yes! You can add as many chronic conditions as needed in your Health Profile. The app will personalize recommendations accordingly.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: How do I log meals?{'\n'}</Text>
+            A: Go to Meals tab → Browse recipes → Tap a meal → Press "Log this meal" button. It will be added to your daily tracking.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: What should I do if the app crashes?{'\n'}</Text>
+            A: Try these steps:{'\n'}
+            1. Force close and restart the app{'\n'}
+            2. Check for app updates{'\n'}
+            3. Clear app cache in device settings{'\n'}
+            4. If issue persists, email support@snfapp.com{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: Can I change my goal (lose/maintain/gain)?{'\n'}</Text>
+            A: Yes! Go to Profile → Edit Profile → Update your goal. The app will recalculate your calorie target.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: How do I export my data?{'\n'}</Text>
+            A: Go to Profile → Settings → Export My Data. You'll receive a JSON file with all your data.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Q: Is the app free?{'\n'}</Text>
+            A: Yes! SNF is completely free with no ads or subscriptions.{'\n\n'}
+
+            <Text style={{ fontWeight: '800' }}>Need More Help?{'\n'}</Text>
+            Email us at: support@snfapp.com{'\n'}
+            We typically respond within 24-48 hours.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  </>
+)}
 
         <Text style={[s.footer, { color: C.textMuted }]}>Quick health check, AI insights, and habit support.{"\n"}Use the tabs above to switch sections.</Text>
       </ScrollView>
@@ -365,6 +1035,39 @@ const s = StyleSheet.create({
   secTitle:{fontSize:11,fontWeight:'700',textTransform:'uppercase',letterSpacing:0.8,marginBottom:10},
   card:{borderWidth:1,borderRadius:20,overflow:'hidden',marginBottom:14},
   cardLbl:{fontSize:10,fontWeight:'700',textTransform:'uppercase',letterSpacing:0.8,marginBottom:10,padding:16,paddingBottom:0},
+  cardTitle:{fontSize:16,fontWeight:'800',marginBottom:12,padding:16,paddingBottom:0},
+  settingRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16,paddingVertical:14,borderBottomWidth:1},
+  settingLeft:{flexDirection:'row',alignItems:'center',gap:10,flex:1},
+  settingIcon:{fontSize:18},
+  settingLabel:{fontSize:14,fontWeight:'600',flex:1},
+  settingArrow:{fontSize:24,lineHeight:24},
+  settingValue:{fontSize:13,fontWeight:'600'},
+  modalContainer:{flex:1},
+  modalHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',padding:16,borderBottomWidth:1},
+  modalTitle:{fontSize:18,fontWeight:'800'},
+  modalClose:{fontSize:16,fontWeight:'700'},
+  modalContent:{padding:16,paddingBottom:32},
+  modalHeaderSide:{flex:1},
+  modalText:{fontSize:14,lineHeight:22},
+  accentHint:{fontSize:12,lineHeight:18,marginBottom:10},
+  accentRow:{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:8},
+  accentChip:{flexDirection:'row',alignItems:'center',gap:8,paddingVertical:10,paddingHorizontal:12,borderRadius:14,borderWidth:1,marginBottom:6},
+  accentSwatch:{width:22,height:22,borderRadius:8,borderWidth:1,borderColor:'rgba(0,0,0,0.06)'},
+  accentChipLbl:{fontSize:13,fontWeight:'700'},
+  paletteLegend:{flexDirection:'row',flexWrap:'wrap',gap:12,marginTop:4},
+  paletteLegendT:{fontSize:10,fontWeight:'600'},
+  cardSub:{fontSize:12,lineHeight:18,marginBottom:14,paddingHorizontal:16},
+  btnSolid:{borderRadius:14,paddingVertical:14,alignItems:'center',marginHorizontal:16,marginBottom:16},
+  btnSolidTxt:{fontSize:15,fontWeight:'800'},
+  editScroll:{padding:16,paddingBottom:40},
+  editLbl:{fontSize:11,fontWeight:'700',textTransform:'uppercase',letterSpacing:0.6,marginBottom:6,marginTop:10},
+  editInput:{borderWidth:1,borderRadius:12,paddingHorizontal:14,paddingVertical:12,fontSize:15},
+  genderRow:{flexDirection:'row',gap:10,marginBottom:8},
+  genderChip:{flex:1,paddingVertical:12,borderRadius:12,borderWidth:1,alignItems:'center'},
+  genderChipT:{fontSize:14,fontWeight:'700'},
+  chipWrap:{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:8},
+  goalChip:{paddingHorizontal:12,paddingVertical:8,borderRadius:10,borderWidth:1},
+  goalChipT:{fontSize:12,fontWeight:'600'},
   metricRow:{flexDirection:'row',alignItems:'center',gap:12,padding:14,borderBottomWidth:1},
   metricIcon:{fontSize:18,width:24,textAlign:'center'},
   metricLbl:{fontSize:13},
@@ -455,8 +1158,11 @@ const s = StyleSheet.create({
   foodCard2:{borderWidth:1,borderRadius:12,padding:10,alignItems:'center',gap:4,minWidth:(width-90)/3},
   resetBtn:{borderWidth:1,borderRadius:14,paddingVertical:14,alignItems:'center',marginBottom:14},
   resetT:{fontSize:14,fontWeight:'600'},
+  healthBtn:{borderWidth:1,borderRadius:16,paddingVertical:14,alignItems:'center',marginBottom:12},
+  healthBtnT:{fontSize:15,fontWeight:'700'},
   logoutBtn:{backgroundColor:'rgba(255,107,107,0.08)',borderWidth:1,borderColor:'rgba(255,107,107,0.2)',borderRadius:16,paddingVertical:14,alignItems:'center',marginBottom:20},
   logoutT:{fontSize:15,fontWeight:'700',color:'#FF6B6B'},
+  logoutText:{fontSize:15,fontWeight:'700',color:'#FFF'},
   footer:{textAlign:'center',fontSize:11,lineHeight:18},
   arrow2:{fontSize:18},
   emptyState:{alignItems:'center',paddingVertical:60},

@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { saveProfile, calculateBMI, calculateBMR, calculateTDEE, getTargetCalories } from '../../data/userStore';
+import { calculateBMI, calculateBMR, calculateTDEE, getTargetCalories } from '../../data/userStore';
+import { saveProfileLocallyAndPush } from '../../lib/profileSupabase';
 
 const HEALTH_CONDITIONS = [
   { id: 1, name: 'Diabetes Type 2', icon: '💉' },
@@ -73,7 +74,7 @@ export default function Step4() {
     const bmr = calculateBMR(weight, height, age, gender);
     const tdee = calculateTDEE(bmr, activity);
     const targetCalories = getTargetCalories(tdee, goal);
-    await saveProfile({
+    await saveProfileLocallyAndPush({
       name, email, age, gender, height, weight, goal, activity,
       conditions: conditions.filter(c => c !== 'None'),
       allergens: allergens.filter(a => a !== 'None'),
@@ -82,7 +83,7 @@ export default function Step4() {
     });
     await AsyncStorage.removeItem('sn_temp_user');
     setLoading(false);
-    router.replace('/(tabs)/home');
+    router.replace('/health-setup');
   }
 
   return (

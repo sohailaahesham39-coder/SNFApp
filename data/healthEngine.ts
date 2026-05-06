@@ -809,10 +809,10 @@ export function analyzeCompliance(tasks: SafePlanTask[]): {
 export const FEEDBACK_QUESTIONS = [
   {
     id: 'energy',
-    question: 'How is your energy compared to start?',
+    question: 'How is your energy compared to the start?',
     icon: '⚡',
     options: [
-      { label: 'Much better',     value: 5, color: '#4DFF9E' },
+      { label: 'Much better',    value: 5, color: '#4DFF9E' },
       { label: 'Slightly better', value: 4, color: '#E8FF4D' },
       { label: 'Same',            value: 3, color: '#FFB84D' },
       { label: 'Slightly worse',  value: 2, color: '#FF9D4D' },
@@ -824,32 +824,1539 @@ export const FEEDBACK_QUESTIONS = [
     question: 'Is your sleep better?',
     icon: '😴',
     options: [
-      { label: 'Much better',  value: 5, color: '#4DFF9E' },
-      { label: 'Better',       value: 4, color: '#E8FF4D' },
-      { label: 'Same',         value: 3, color: '#FFB84D' },
-      { label: 'Worse',        value: 2, color: '#FF6B6B' },
+      { label: 'Deep and restful',   value: 5, color: '#4DFF9E' },
+      { label: 'Better than before', value: 4, color: '#E8FF4D' },
+      { label: 'Same',               value: 3, color: '#FFB84D' },
+      { label: 'Worse',              value: 2, color: '#FF6B6B' },
     ],
   },
   {
     id: 'mood',
-    question: 'How is your mood?',
+    question: 'How is your overall mood?',
     icon: '😊',
     options: [
-      { label: 'Very good',    value: 5, color: '#4DFF9E' },
-      { label: 'Better',       value: 4, color: '#E8FF4D' },
-      { label: 'Normal',       value: 3, color: '#FFB84D' },
-      { label: 'Not good',     value: 2, color: '#FF6B6B' },
+      { label: 'Very good', value: 5, color: '#4DFF9E' },
+      { label: 'Better',    value: 4, color: '#E8FF4D' },
+      { label: 'Normal',    value: 3, color: '#FFB84D' },
+      { label: 'Not good',  value: 2, color: '#FF6B6B' },
     ],
   },
   {
     id: 'symptoms',
-    question: 'Have symptoms decreased?',
+    question: 'Have your symptoms decreased?',
     icon: '🔬',
     options: [
-      { label: 'Much less',    value: 5, color: '#4DFF9E' },
-      { label: 'A bit less',   value: 4, color: '#E8FF4D' },
-      { label: 'Same',         value: 3, color: '#FFB84D' },
-      { label: 'Increased',    value: 2, color: '#FF6B6B' },
+      { label: 'Much less', value: 5, color: '#4DFF9E' },
+      { label: 'A bit less', value: 4, color: '#E8FF4D' },
+      { label: 'Same',       value: 3, color: '#FFB84D' },
+      { label: 'Increased',  value: 2, color: '#FF6B6B' },
     ],
   },
 ];
+
+// ══════════════════════════════════════════════════════════════
+// DEFICIENCY ANALYSIS SHEET GENERATOR (Scientific)
+// ══════════════════════════════════════════════════════════════
+
+export interface DeficiencyAnalysis {
+  nutrient: string;
+  emoji: string;
+  confidence: number;
+  matchedSymptoms: { id: string; name: string }[];
+  scientificBasis: string;
+
+  // Risk Level
+  riskLevel: 'safe_to_start' | 'caution' | 'lab_required_first';
+
+  // If safe to start
+  supplement?: {
+    name: string;
+    dose: string;
+    timing: string;
+    duration: string;
+    cost: string;
+    with: string;
+  };
+
+  // Lab tests (always included)
+  labTests: {
+    code: string;
+    name: string;
+    cost: string;
+    when: string;
+    why: string;
+    fasting: boolean;
+  }[];
+
+  // Egyptian foods
+  egyptianFoods: {
+    name: string;
+    emoji: string;
+    amount: string;
+    nutrientContent: string;
+  }[];
+
+  // Warnings
+  warnings: string[];
+
+  // Monitoring
+  monitoring?: {
+    what: string;
+    when: string;
+    action: string;
+  };
+}
+
+export function generateDeficiencyAnalysisSheet(
+  conditions: string[],
+  symptoms: string[],
+  habits: string[],
+  age: number,
+  gender: 'male' | 'female'
+): DeficiencyAnalysis[] {
+  const results: DeficiencyAnalysis[] = [];
+
+  // ── IRON DEFICIENCY ────────────────────────────────────────
+  const ironSymptoms = ['sym_fatigue', 'sym_dizzy', 'sym_hairloss', 'sym_palecolor', 'sym_weakness', 'sym_headache'];
+  const ironMatched = ironSymptoms.filter(s => symptoms.includes(s));
+  const hasAnemia = conditions.includes('anemia');
+
+  if (ironMatched.length >= 2 || hasAnemia) {
+    const confidence = hasAnemia
+      ? 95
+      : Math.min(95, Math.round((ironMatched.length / ironSymptoms.length) * 100) + 20);
+
+    results.push({
+      nutrient: 'Iron',
+      emoji: '🩸',
+      confidence,
+      matchedSymptoms: ironMatched.map(id => {
+        const sym = SYMPTOMS_LIST.find(s => s.id === id);
+        return { id, name: sym?.name || id };
+      }),
+      scientificBasis: hasAnemia
+        ? 'Diagnosed anemia - iron deficiency confirmed'
+        : `${ironMatched.length}/${ironSymptoms.length} symptoms match (${Math.round(ironMatched.length / ironSymptoms.length * 100)}%) - strong indicator`,
+
+      riskLevel: 'lab_required_first',
+
+      labTests: [
+        {
+          code: 'CBC',
+          name: 'Complete Blood Count',
+          cost: '50-100 EGP',
+          when: 'Within 1 week (URGENT)',
+          why: 'Check hemoglobin and red blood cell count',
+          fasting: false,
+        },
+        {
+          code: 'FERR',
+          name: 'Ferritin (Iron Storage)',
+          cost: '100-200 EGP',
+          when: 'Same time as CBC',
+          why: 'Measure iron stores in body - most accurate test',
+          fasting: false,
+        },
+        {
+          code: 'IRON',
+          name: 'Serum Iron + TIBC',
+          cost: '100-200 EGP',
+          when: 'If ferritin is low',
+          why: 'Complete iron panel for accurate diagnosis',
+          fasting: true,
+        },
+      ],
+
+      egyptianFoods: [
+        { name: 'Liver (beef/chicken)', emoji: '🫀', amount: '100g', nutrientContent: '6-8mg iron' },
+        { name: 'Red meat', emoji: '🥩', amount: '100g', nutrientContent: '2-3mg iron' },
+        { name: 'Fava beans (foul)', emoji: '🫘', amount: '1 cup cooked', nutrientContent: '2-3mg iron' },
+        { name: 'Lentils', emoji: '🌿', amount: '1 cup cooked', nutrientContent: '3-4mg iron' },
+        { name: 'Spinach (cooked)', emoji: '🥬', amount: '1 cup', nutrientContent: '3-6mg iron' },
+        { name: 'Molokheya', emoji: '🥬', amount: '1 cup cooked', nutrientContent: '2-3mg iron' },
+      ],
+
+      warnings: [
+        '⚠️ DO NOT SUPPLEMENT WITHOUT LAB TEST',
+        '⚠️ Excess iron is toxic and can damage organs',
+        '⚠️ Iron overload is dangerous - must verify deficiency first',
+        '⚠️ If ferritin >200 (men) or >150 (women) = DO NOT take iron',
+        '💡 Eat iron-rich foods + Vitamin C (orange, lemon) for better absorption',
+        '💡 Avoid tea/coffee with meals - blocks iron absorption',
+      ],
+
+      monitoring: {
+        what: 'Watch for improvement in fatigue and pale skin',
+        when: 'After 2 weeks of iron-rich foods',
+        action: 'If no improvement → GET LAB TEST IMMEDIATELY',
+      },
+    });
+  }
+
+  // ── VITAMIN D DEFICIENCY ───────────────────────────────────
+  const vitdSymptoms = ['sym_fatigue', 'sym_sleepy', 'sym_jointpain', 'sym_sadness', 'sym_cramps', 'sym_weakness'];
+  const vitdMatched = vitdSymptoms.filter(s => symptoms.includes(s));
+  const hasDepression = conditions.includes('depression');
+  const hasBones = conditions.some(c => ['osteoporosis', 'arthritis'].includes(c));
+
+  // In Egypt, 80%+ have Vitamin D deficiency - very safe assumption
+  if (vitdMatched.length >= 1 || hasDepression || hasBones) {
+    const confidence = Math.min(
+      95,
+      Math.round((vitdMatched.length / vitdSymptoms.length) * 100) +
+        (hasDepression ? 20 : 0) +
+        (hasBones ? 20 : 0) +
+        30
+    );
+
+    results.push({
+      nutrient: 'Vitamin D3',
+      emoji: '☀️',
+      confidence,
+      matchedSymptoms: vitdMatched.map(id => {
+        const sym = SYMPTOMS_LIST.find(s => s.id === id);
+        return { id, name: sym?.name || id };
+      }),
+      scientificBasis: `${vitdMatched.length}/${vitdSymptoms.length} symptoms match. PLUS: 80%+ of Egyptians are deficient (limited sun exposure + indoor lifestyle)`,
+
+      riskLevel: 'safe_to_start',
+
+      supplement: {
+        name: 'Vitamin D3 (Cholecalciferol)',
+        dose: '1000-2000 IU/day',
+        timing: 'With largest meal (needs fat for absorption)',
+        duration: 'Until lab test (max 30 days)',
+        cost: '50-100 EGP/month',
+        with: 'Fatty meal (eggs, cheese, olive oil, tahini)',
+      },
+
+      labTests: [
+        {
+          code: 'VITD',
+          name: '25-OH Vitamin D',
+          cost: '150-250 EGP',
+          when: 'Within 1 month',
+          why: 'Confirm deficiency level and adjust dose',
+          fasting: false,
+        },
+      ],
+
+      egyptianFoods: [
+        { name: 'Fatty fish (salmon, tuna)', emoji: '🐟', amount: '100g', nutrientContent: '400-600 IU' },
+        { name: 'Egg yolks', emoji: '🥚', amount: '2 eggs', nutrientContent: '80-100 IU' },
+        { name: 'Liver', emoji: '🫀', amount: '100g', nutrientContent: '40-50 IU' },
+        { name: 'Fortified milk', emoji: '🥛', amount: '1 cup', nutrientContent: '100-120 IU' },
+        { name: 'Sunlight exposure', emoji: '☀️', amount: '15-20 min/day', nutrientContent: '1000-2000 IU (arms/legs exposed)' },
+      ],
+
+      warnings: [
+        '✅ Safe to start at 1000-2000 IU/day',
+        '⚠️ Do not exceed 4000 IU/day without lab test',
+        '💡 Take with fatty meal (absorption increases 50%)',
+        '💡 Best taken in morning/afternoon (not at night)',
+        '💡 Get lab test within 1 month to adjust dose',
+        '💡 Spend 15-20 min in sun daily (arms/legs exposed)',
+      ],
+
+      monitoring: {
+        what: 'Watch for improved energy and mood',
+        when: 'After 2-3 weeks',
+        action: 'If improvement → continue. If not → get lab test to check levels',
+      },
+    });
+  }
+
+  // ── VITAMIN B12 DEFICIENCY ─────────────────────────────────
+  const b12Symptoms = ['sym_fatigue', 'sym_dizzy', 'sym_focus', 'sym_memory', 'sym_palecolor', 'sym_weakness', 'sym_mood'];
+  const b12Matched = b12Symptoms.filter(s => symptoms.includes(s));
+  const hasB12Anemia = conditions.includes('anemia_b12');
+  const isVegetarian = habits.includes('hab_noveggies');
+
+  if (b12Matched.length >= 2 || hasB12Anemia || isVegetarian) {
+    const confidence = hasB12Anemia
+      ? 95
+      : Math.min(90, Math.round((b12Matched.length / b12Symptoms.length) * 100) + (isVegetarian ? 20 : 0));
+
+    results.push({
+      nutrient: 'Vitamin B12',
+      emoji: '🔴',
+      confidence,
+      matchedSymptoms: b12Matched.map(id => {
+        const sym = SYMPTOMS_LIST.find(s => s.id === id);
+        return { id, name: sym?.name || id };
+      }),
+      scientificBasis: hasB12Anemia
+        ? 'Diagnosed B12 deficiency anemia'
+        : `${b12Matched.length}/${b12Symptoms.length} neurological symptoms match - characteristic of B12 deficiency`,
+
+      riskLevel: 'caution',
+
+      supplement: {
+        name: 'Vitamin B12 (Methylcobalamin) - Sublingual',
+        dose: '500-1000 mcg/day',
+        timing: 'Morning, empty stomach (sublingual = under tongue)',
+        duration: '2 weeks trial',
+        cost: '50-120 EGP/month',
+        with: 'Nothing - absorbs under tongue',
+      },
+
+      labTests: [
+        {
+          code: 'B12',
+          name: 'Vitamin B12 (Serum)',
+          cost: '100-200 EGP',
+          when: 'If no improvement after 2 weeks',
+          why: 'Check B12 level - severe deficiency needs injections',
+          fasting: false,
+        },
+        {
+          code: 'MMA',
+          name: 'Methylmalonic Acid',
+          cost: '250-400 EGP',
+          when: 'If B12 borderline (200-400 pg/mL)',
+          why: 'More accurate than serum B12 - confirms true deficiency',
+          fasting: false,
+        },
+      ],
+
+      egyptianFoods: [
+        { name: 'Liver (beef/chicken)', emoji: '🫀', amount: '100g', nutrientContent: '60-80 mcg' },
+        { name: 'Red meat', emoji: '🥩', amount: '100g', nutrientContent: '2-3 mcg' },
+        { name: 'Fish (salmon, tuna)', emoji: '🐟', amount: '100g', nutrientContent: '3-5 mcg' },
+        { name: 'Eggs', emoji: '🥚', amount: '2 eggs', nutrientContent: '1-2 mcg' },
+        { name: 'Dairy (milk, cheese)', emoji: '🥛', amount: '1 cup milk', nutrientContent: '1 mcg' },
+        { name: 'Cottage cheese (gebna areesh)', emoji: '🧀', amount: '100g', nutrientContent: '0.5-1 mcg' },
+      ],
+
+      warnings: [
+        '⚠️ If severe symptoms (numbness, balance issues) → SEE DOCTOR for injections',
+        '⚠️ Pills may not work if absorption issues - injections needed',
+        '💡 Try sublingual for 2 weeks first',
+        '💡 If no improvement → get lab test immediately',
+        '💡 Vegetarians/vegans at high risk - supplement essential',
+        '⚠️ Deficiency can cause permanent nerve damage if untreated',
+      ],
+
+      monitoring: {
+        what: 'Watch for improved energy, focus, and memory',
+        when: 'After 10-14 days',
+        action: 'If NO improvement → GET LAB TEST + consider injections',
+      },
+    });
+  }
+
+  // ── MAGNESIUM DEFICIENCY ───────────────────────────────────
+  const mgSymptoms = ['sym_anxious', 'sym_cramps', 'sym_sleepy', 'sym_headache', 'sym_mood'];
+  const mgMatched = mgSymptoms.filter(s => symptoms.includes(s));
+  const hasCaffeine = habits.some(h => h.includes('coffee') || h.includes('energy'));
+  const hasStress = habits.includes('hab_stress');
+
+  if (mgMatched.length >= 2 || hasCaffeine || hasStress) {
+    const confidence = Math.min(
+      90,
+      Math.round((mgMatched.length / mgSymptoms.length) * 100) +
+        (hasCaffeine ? 15 : 0) +
+        (hasStress ? 15 : 0)
+    );
+
+    results.push({
+      nutrient: 'Magnesium',
+      emoji: '⚡',
+      confidence,
+      matchedSymptoms: mgMatched.map(id => {
+        const sym = SYMPTOMS_LIST.find(s => s.id === id);
+        return { id, name: sym?.name || id };
+      }),
+      scientificBasis: hasCaffeine || hasStress
+        ? `${mgMatched.length}/${mgSymptoms.length} symptoms + caffeine/stress depletes magnesium rapidly`
+        : `${mgMatched.length}/${mgSymptoms.length} symptoms match magnesium deficiency pattern`,
+
+      riskLevel: 'safe_to_start',
+
+      supplement: {
+        name: 'Magnesium Glycinate',
+        dose: '200-300 mg/day (start with 150mg)',
+        timing: 'Before bed (helps sleep)',
+        duration: 'Long-term safe',
+        cost: '80-150 EGP/month',
+        with: 'Small snack (better absorption)',
+      },
+
+      labTests: [
+        {
+          code: 'MG',
+          name: 'Magnesium (Serum)',
+          cost: '80-150 EGP',
+          when: 'Optional - not very accurate',
+          why: 'Blood test misses tissue deficiency (most Mg is in cells, not blood)',
+          fasting: false,
+        },
+      ],
+
+      egyptianFoods: [
+        { name: 'Almonds', emoji: '🌰', amount: '30g (1 handful)', nutrientContent: '80 mg' },
+        { name: 'Tahini', emoji: '🫙', amount: '2 tbsp', nutrientContent: '60-70 mg' },
+        { name: 'Lentils', emoji: '🌿', amount: '1 cup cooked', nutrientContent: '70-80 mg' },
+        { name: 'Fava beans', emoji: '🫘', amount: '1 cup cooked', nutrientContent: '60-70 mg' },
+        { name: 'Spinach (cooked)', emoji: '🥬', amount: '1 cup', nutrientContent: '150 mg' },
+        { name: 'Bananas', emoji: '🍌', amount: '1 medium', nutrientContent: '30 mg' },
+        { name: 'Dark chocolate (70%+)', emoji: '🍫', amount: '30g', nutrientContent: '65 mg' },
+      ],
+
+      warnings: [
+        '✅ Very safe to supplement',
+        '⚠️ Start with 150mg - may cause loose stools if too high',
+        '💡 Magnesium Glycinate is best form (no laxative effect)',
+        '💡 Take before bed - improves sleep quality',
+        '💡 Caffeine depletes magnesium - supplement essential if high coffee intake',
+        '⚠️ If diarrhea occurs → reduce dose by half',
+      ],
+
+      monitoring: {
+        what: 'Watch for better sleep, less muscle cramps, calmer mood',
+        when: 'After 1-2 weeks',
+        action: 'If works well → continue long-term (very safe)',
+      },
+    });
+  }
+
+  // ── OMEGA-3 DEFICIENCY ─────────────────────────────────────
+  const o3Symptoms = ['sym_focus', 'sym_memory', 'sym_jointpain', 'sym_mood', 'sym_dryskin', 'sym_sadness'];
+  const o3Matched = o3Symptoms.filter(s => symptoms.includes(s));
+  const hasDepression2 = conditions.includes('depression');
+  const hasHeart = conditions.some(c => ['heart_disease', 'cholesterol'].includes(c));
+
+  if (o3Matched.length >= 2 || hasDepression2 || hasHeart) {
+    const confidence = Math.min(
+      85,
+      Math.round((o3Matched.length / o3Symptoms.length) * 100) +
+        (hasDepression2 ? 15 : 0) +
+        (hasHeart ? 15 : 0)
+    );
+
+    results.push({
+      nutrient: 'Omega-3 (Fish Oil)',
+      emoji: '🐟',
+      confidence,
+      matchedSymptoms: o3Matched.map(id => {
+        const sym = SYMPTOMS_LIST.find(s => s.id === id);
+        return { id, name: sym?.name || id };
+      }),
+      scientificBasis: `${o3Matched.length}/${o3Symptoms.length} symptoms + strong evidence for brain/heart health`,
+
+      riskLevel: 'safe_to_start',
+
+      supplement: {
+        name: 'Omega-3 (EPA + DHA Fish Oil)',
+        dose: '1000mg EPA+DHA combined/day',
+        timing: 'With fatty meal (breakfast/lunch)',
+        duration: 'Long-term safe',
+        cost: '100-200 EGP/month',
+        with: 'Fatty meal (better absorption)',
+      },
+
+      labTests: [
+        {
+          code: 'OMEGA3',
+          name: 'Omega-3 Index',
+          cost: '500-800 EGP (expensive)',
+          when: 'Optional - not essential',
+          why: 'Measures red blood cell Omega-3 levels',
+          fasting: false,
+        },
+      ],
+
+      egyptianFoods: [
+        { name: 'Salmon', emoji: '🐟', amount: '100g', nutrientContent: '1500-2000mg EPA+DHA' },
+        { name: 'Sardines', emoji: '🐟', amount: '100g', nutrientContent: '1000-1500mg' },
+        { name: 'Tuna', emoji: '🥫', amount: '100g', nutrientContent: '500-1000mg' },
+        { name: 'Mackerel (eskombri)', emoji: '🐟', amount: '100g', nutrientContent: '2000-2500mg' },
+        { name: 'Walnuts', emoji: '🌰', amount: '30g', nutrientContent: '2500mg ALA (plant omega-3)' },
+        { name: 'Flaxseeds (ketan)', emoji: '🌿', amount: '1 tbsp ground', nutrientContent: '2400mg ALA' },
+      ],
+
+      warnings: [
+        '✅ Very safe to supplement',
+        '⚠️ If on blood thinners (aspirin, warfarin) → consult doctor first',
+        '💡 Take with food to avoid fishy burps',
+        '💡 High EPA (>500mg) = better for mood/depression',
+        '💡 High DHA (>500mg) = better for brain/memory',
+        '💡 Store in fridge to prevent oxidation',
+      ],
+
+      monitoring: {
+        what: 'Watch for improved mood, focus, and joint pain',
+        when: 'After 4-6 weeks (takes time)',
+        action: 'If works → continue long-term',
+      },
+    });
+  }
+
+  // Sort by confidence (highest first)
+  return results.sort((a, b) => b.confidence - a.confidence);
+}
+
+// ══════════════════════════════════════════════════════════════
+// LAB TEST PLAN GENERATOR (Personalized & Prioritized)
+// ══════════════════════════════════════════════════════════════
+
+export interface LabTestPlan {
+  totalTests: number;
+  totalCostMin: number;
+  totalCostMax: number;
+
+  urgent: LabTestPlanItem[];      // Do within 1 week
+  high: LabTestPlanItem[];        // Do within 1 month
+  medium: LabTestPlanItem[];      // Do within 3 months
+
+  fastingRequired: boolean;
+  fastingTests: string[];
+
+  packageSuggestions: {
+    name: string;
+    tests: string[];
+    estimatedCost: string;
+    savings: string;
+  }[];
+
+  tips: string[];
+}
+
+export interface LabTestPlanItem {
+  code: string;
+  name: string;
+  why: string;
+  cost: string;
+  costMin: number;
+  costMax: number;
+  fasting: boolean;
+  fastingHours?: number;
+  bestTime?: string;
+  where: string;
+  prepare: string[];
+  relatedTo: string[];  // conditions/symptoms
+}
+
+export function generateLabTestPlan(
+  conditions: string[],
+  symptoms: string[],
+  habits: string[],
+  age: number,
+  gender: 'male' | 'female',
+  lastLabDate?: string
+): LabTestPlan {
+  const urgent: LabTestPlanItem[] = [];
+  const high: LabTestPlanItem[] = [];
+  const medium: LabTestPlanItem[] = [];
+
+  const addedTests = new Set<string>();
+
+  function addTest(test: LabTestPlanItem, priority: 'urgent' | 'high' | 'medium') {
+    if (addedTests.has(test.code)) return;
+    addedTests.add(test.code);
+
+    if (priority === 'urgent') urgent.push(test);
+    else if (priority === 'high') high.push(test);
+    else medium.push(test);
+  }
+
+  // ── DIABETES TESTS ─────────────────────────────────────────
+  if (conditions.some(c => c.includes('diabetes') || c === 'prediabetes')) {
+    addTest({
+      code: 'HBA1C',
+      name: 'HbA1c (Glycated Hemoglobin)',
+      why: 'Monitor blood sugar control over last 3 months - most important diabetes test',
+      cost: '100-200 EGP',
+      costMin: 100,
+      costMax: 200,
+      fasting: false,
+      where: 'Any lab (Al-Borg, Al-Mokhtabar, Alpha)',
+      prepare: [
+        'No fasting required - can eat normally',
+        'Take morning medications as usual',
+        'Best done every 3 months',
+      ],
+      relatedTo: ['Diabetes Type 1', 'Diabetes Type 2', 'Prediabetes'],
+    }, 'urgent');
+
+    addTest({
+      code: 'FBS',
+      name: 'Fasting Blood Sugar',
+      why: 'Check current sugar level after overnight fast',
+      cost: '30-60 EGP',
+      costMin: 30,
+      costMax: 60,
+      fasting: true,
+      fastingHours: 8,
+      bestTime: '8-10am (after 8-10 hours fasting)',
+      where: 'Any lab',
+      prepare: [
+        'Fast 8-10 hours (water only)',
+        'Take morning medications AFTER test',
+        'Schedule morning appointment',
+      ],
+      relatedTo: ['Diabetes', 'Prediabetes'],
+    }, 'urgent');
+
+    addTest({
+      code: 'INSULIN',
+      name: 'Fasting Insulin',
+      why: 'Check insulin resistance - helps adjust treatment',
+      cost: '150-250 EGP',
+      costMin: 150,
+      costMax: 250,
+      fasting: true,
+      fastingHours: 8,
+      bestTime: 'Same time as FBS',
+      where: 'Specialized labs (Al-Borg, Al-Mokhtabar)',
+      prepare: [
+        'Fast 8-10 hours',
+        'Do together with FBS (same blood draw)',
+        'Tells if you have insulin resistance',
+      ],
+      relatedTo: ['Diabetes Type 2', 'Prediabetes', 'PCOS', 'Obesity'],
+    }, 'high');
+  }
+
+  // ── HEART & BLOOD PRESSURE TESTS ───────────────────────────
+  if (conditions.some(c => ['hypertension', 'heart_disease', 'cholesterol'].includes(c))) {
+    if (conditions.includes('hypertension')) {
+      addTest({
+        code: 'BP24',
+        name: '24-Hour Blood Pressure Monitor',
+        why: 'Track blood pressure pattern throughout day and night - confirms diagnosis',
+        cost: '150-300 EGP',
+        costMin: 150,
+        costMax: 300,
+        fasting: false,
+        where: 'Cardiology centers, major hospitals',
+        prepare: [
+          'Wear device for 24 hours',
+          'Keep normal daily routine',
+          'Log activities (eating, exercise, sleep)',
+          'Device takes BP every 15-30 minutes',
+        ],
+        relatedTo: ['High Blood Pressure'],
+      }, 'urgent');
+    }
+
+    addTest({
+      code: 'LIPID',
+      name: 'Full Lipid Profile (Cholesterol Panel)',
+      why: 'Check LDL (bad), HDL (good), triglycerides - heart disease risk',
+      cost: '80-150 EGP',
+      costMin: 80,
+      costMax: 150,
+      fasting: true,
+      fastingHours: 12,
+      bestTime: 'Morning after 12-hour fast',
+      where: 'Any lab',
+      prepare: [
+        'Fast 12 hours (water only)',
+        'No alcohol 48 hours before',
+        'Take medications AFTER test',
+        'Essential if diabetes + heart issues',
+      ],
+      relatedTo: ['High Cholesterol', 'Heart Disease', 'Diabetes'],
+    }, 'urgent');
+
+    if (conditions.includes('heart_disease')) {
+      addTest({
+        code: 'ECHO',
+        name: 'Echocardiogram (Heart Ultrasound)',
+        why: 'Check heart chambers, valves, and pumping function',
+        cost: '400-700 EGP',
+        costMin: 400,
+        costMax: 700,
+        fasting: false,
+        where: 'Cardiology centers, hospitals',
+        prepare: [
+          'No fasting needed',
+          'Wear comfortable clothing',
+          'Takes 30-45 minutes',
+          'Painless ultrasound',
+        ],
+        relatedTo: ['Heart Disease', 'Heart Failure', 'Irregular Heartbeat'],
+      }, 'urgent');
+
+      addTest({
+        code: 'ECG',
+        name: 'Electrocardiogram (ECG/EKG)',
+        why: 'Check heart electrical activity and rhythm',
+        cost: '50-100 EGP',
+        costMin: 50,
+        costMax: 100,
+        fasting: false,
+        where: 'Any clinic or lab',
+        prepare: [
+          'No fasting needed',
+          'Quick test (5 minutes)',
+          'Remove jewelry, metal objects',
+        ],
+        relatedTo: ['Heart Disease', 'Irregular Heartbeat', 'Chest Pain'],
+      }, 'high');
+    }
+  }
+
+  // ── KIDNEY TESTS ───────────────────────────────────────────
+  if (conditions.some(c => c.includes('ckd') || c.includes('kidney'))) {
+    addTest({
+      code: 'CREAT',
+      name: 'Creatinine + eGFR',
+      why: 'Main kidney function test - must monitor regularly',
+      cost: '30-60 EGP',
+      costMin: 30,
+      costMax: 60,
+      fasting: false,
+      where: 'Any lab',
+      prepare: [
+        'No fasting needed',
+        'Avoid heavy protein meal before test',
+        'eGFR calculated automatically from creatinine',
+      ],
+      relatedTo: ['Chronic Kidney Disease', 'Diabetes', 'High Blood Pressure'],
+    }, 'urgent');
+
+    addTest({
+      code: 'UREA',
+      name: 'Blood Urea Nitrogen (BUN)',
+      why: 'Another kidney function marker - do with creatinine',
+      cost: '30-60 EGP',
+      costMin: 30,
+      costMax: 60,
+      fasting: false,
+      where: 'Any lab',
+      prepare: [
+        'No fasting needed',
+        'Usually done with creatinine (same tube)',
+      ],
+      relatedTo: ['Chronic Kidney Disease'],
+    }, 'urgent');
+
+    addTest({
+      code: 'UACR',
+      name: 'Urine Albumin/Creatinine Ratio',
+      why: 'Early detection of kidney damage before creatinine rises',
+      cost: '80-150 EGP',
+      costMin: 80,
+      costMax: 150,
+      fasting: false,
+      where: 'Any lab (urine sample)',
+      prepare: [
+        'First morning urine is best',
+        'Clean catch (midstream)',
+        'Detects kidney damage early',
+      ],
+      relatedTo: ['Chronic Kidney Disease', 'Diabetes', 'High Blood Pressure'],
+    }, 'high');
+  }
+
+  // ── THYROID TESTS ──────────────────────────────────────────
+  if (conditions.some(c => c.includes('thyroid')) ||
+      symptoms.some(s => ['sym_fatigue', 'sym_anxious', 'sym_sadness', 'sym_hairloss'].includes(s))) {
+    addTest({
+      code: 'TSH',
+      name: 'TSH (Thyroid Stimulating Hormone)',
+      why: 'Main thyroid test - screens for hypo/hyperthyroidism',
+      cost: '80-150 EGP',
+      costMin: 80,
+      costMax: 150,
+      fasting: false,
+      bestTime: 'Morning (TSH highest in morning)',
+      where: 'Any lab',
+      prepare: [
+        'Best done in morning',
+        'No fasting needed',
+        'If on thyroid medication, take AFTER test',
+      ],
+      relatedTo: ['Hypothyroidism', 'Hyperthyroidism', 'Fatigue', 'Anxiety', 'Depression'],
+    }, 'high');
+
+    if (conditions.some(c => c.includes('thyroid'))) {
+      addTest({
+        code: 'FT4',
+        name: 'Free T4',
+        why: 'Active thyroid hormone - needed if TSH abnormal',
+        cost: '80-150 EGP',
+        costMin: 80,
+        costMax: 150,
+        fasting: false,
+        where: 'Any lab',
+        prepare: [
+          'Usually done with TSH',
+          'Confirms thyroid diagnosis',
+        ],
+        relatedTo: ['Hypothyroidism', 'Hyperthyroidism'],
+      }, 'high');
+    }
+  }
+
+  // ── ANEMIA TESTS (FATIGUE SYMPTOMS) ────────────────────────
+  if (symptoms.some(s => ['sym_fatigue', 'sym_dizzy', 'sym_palecolor', 'sym_weakness'].includes(s))) {
+    addTest({
+      code: 'CBC',
+      name: 'Complete Blood Count',
+      why: 'Check for anemia (low hemoglobin, red blood cells)',
+      cost: '50-100 EGP',
+      costMin: 50,
+      costMax: 100,
+      fasting: false,
+      where: 'Any lab',
+      prepare: [
+        'No fasting needed',
+        'Quick blood draw',
+        'Checks hemoglobin, WBC, platelets',
+      ],
+      relatedTo: ['Anemia', 'Fatigue', 'Pale Skin', 'Weakness'],
+    }, 'urgent');
+
+    addTest({
+      code: 'FERR',
+      name: 'Ferritin (Iron Storage)',
+      why: 'Most accurate test for iron deficiency',
+      cost: '100-200 EGP',
+      costMin: 100,
+      costMax: 200,
+      fasting: false,
+      where: 'Any lab',
+      prepare: [
+        'No fasting needed',
+        'Do with CBC',
+        'Shows iron stores even before anemia develops',
+      ],
+      relatedTo: ['Anemia', 'Fatigue', 'Hair Loss'],
+    }, 'urgent');
+  }
+
+  // ── VITAMIN D (ALMOST EVERYONE IN EGYPT) ────────────────────
+  if (symptoms.length > 0 || age > 30) {
+    addTest({
+      code: 'VITD',
+      name: 'Vitamin D (25-OH)',
+      why: '80%+ of Egyptians are deficient - very common cause of fatigue',
+      cost: '150-250 EGP',
+      costMin: 150,
+      costMax: 250,
+      fasting: false,
+      where: 'Any lab',
+      prepare: [
+        'No fasting needed',
+        'Very common deficiency in Egypt',
+        'Safe to supplement while waiting for results',
+      ],
+      relatedTo: ['Fatigue', 'Joint Pain', 'Depression', 'Osteoporosis'],
+    }, 'high');
+  }
+
+  // ── LIVER TESTS (IF FATTY LIVER OR OBESITY) ────────────────
+  if (conditions.includes('fatty_liver') || conditions.includes('obesity')) {
+    addTest({
+      code: 'LFT',
+      name: 'Liver Function Tests (ALT, AST)',
+      why: 'Check liver health - elevated in fatty liver',
+      cost: '80-150 EGP',
+      costMin: 80,
+      costMax: 150,
+      fasting: true,
+      fastingHours: 8,
+      where: 'Any lab',
+      prepare: [
+        'Fast 8 hours',
+        'Do with other fasting tests',
+      ],
+      relatedTo: ['Fatty Liver', 'Obesity'],
+    }, 'high');
+  }
+
+  // ── PCOS TESTS ─────────────────────────────────────────────
+  if (conditions.includes('pcos') && gender === 'female') {
+    addTest({
+      code: 'TESTO',
+      name: 'Total Testosterone',
+      why: 'Usually elevated in PCOS',
+      cost: '100-200 EGP',
+      costMin: 100,
+      costMax: 200,
+      fasting: false,
+      bestTime: 'Morning (highest in morning)',
+      where: 'Specialized labs',
+      prepare: [
+        'Best done in morning',
+        'Day 2-5 of menstrual cycle if regular',
+      ],
+      relatedTo: ['PCOS'],
+    }, 'urgent');
+
+    addTest({
+      code: 'LHFSH',
+      name: 'LH & FSH',
+      why: 'LH/FSH ratio >2 indicates PCOS',
+      cost: '150-250 EGP',
+      costMin: 150,
+      costMax: 250,
+      fasting: false,
+      bestTime: 'Day 2-5 of cycle',
+      where: 'Specialized labs',
+      prepare: [
+        'Day 2-5 of menstrual cycle',
+        'Ratio more important than individual values',
+      ],
+      relatedTo: ['PCOS'],
+    }, 'urgent');
+  }
+
+  // ── GENERAL SCREENING (IF NO SPECIFIC CONDITIONS) ──────────
+  if (conditions.length === 0 && symptoms.length > 0) {
+    addTest({
+      code: 'CBC',
+      name: 'Complete Blood Count',
+      why: 'General health screening',
+      cost: '50-100 EGP',
+      costMin: 50,
+      costMax: 100,
+      fasting: false,
+      where: 'Any lab',
+      prepare: ['No fasting needed'],
+      relatedTo: ['General Screening'],
+    }, 'medium');
+
+    addTest({
+      code: 'VITD',
+      name: 'Vitamin D',
+      why: 'Very common deficiency in Egypt',
+      cost: '150-250 EGP',
+      costMin: 150,
+      costMax: 250,
+      fasting: false,
+      where: 'Any lab',
+      prepare: ['No fasting needed'],
+      relatedTo: ['General Screening'],
+    }, 'high');
+  }
+
+  // ── CALCULATE TOTALS ───────────────────────────────────────
+  const allTests = [...urgent, ...high, ...medium];
+  const totalCostMin = allTests.reduce((sum, t) => sum + t.costMin, 0);
+  const totalCostMax = allTests.reduce((sum, t) => sum + t.costMax, 0);
+
+  const fastingTests = allTests.filter(t => t.fasting).map(t => t.name);
+  const fastingRequired = fastingTests.length > 0;
+
+  // ── PACKAGE SUGGESTIONS ────────────────────────────────────
+  const packages: LabTestPlan['packageSuggestions'] = [];
+
+  if (addedTests.has('HBA1C') && addedTests.has('FBS') && addedTests.has('LIPID')) {
+    packages.push({
+      name: 'Diabetes Management Package',
+      tests: ['HbA1c', 'Fasting Blood Sugar', 'Lipid Profile', 'Kidney Function'],
+      estimatedCost: '350-500 EGP',
+      savings: 'Save 20-30% vs individual tests',
+    });
+  }
+
+  if (addedTests.has('LIPID') && addedTests.has('ECG')) {
+    packages.push({
+      name: 'Heart Health Package',
+      tests: ['Lipid Profile', 'ECG', 'Blood Pressure Monitoring'],
+      estimatedCost: '300-450 EGP',
+      savings: 'Save 15-25%',
+    });
+  }
+
+  if (allTests.length >= 5) {
+    packages.push({
+      name: 'Comprehensive Health Check',
+      tests: ['CBC', 'Kidney', 'Liver', 'Thyroid', 'Vitamin D', 'Lipid Profile'],
+      estimatedCost: '600-900 EGP',
+      savings: 'Save 25-35% - best value if doing many tests',
+    });
+  }
+
+  // ── TIPS ───────────────────────────────────────────────────
+  const tips: string[] = [
+    '💡 Many labs offer packages - ask about discounts for multiple tests',
+    '💡 Compare prices between labs (Al-Borg, Al-Mokhtabar, Alpha, etc.)',
+  ];
+
+  if (fastingRequired) {
+    tips.push('⏰ Schedule fasting tests in morning (8-10am) after overnight fast');
+    tips.push('💧 Water is allowed during fasting - stay hydrated');
+    tips.push('💊 Take morning medications AFTER the test (or ask doctor)');
+  }
+
+  if (urgent.length > 0) {
+    tips.push('🚨 Urgent tests should be done within 1 week');
+  }
+
+  if (allTests.length >= 5) {
+    tips.push('📅 Can split tests into 2 visits to manage cost');
+    tips.push('📋 Some tests can be done together (same blood draw)');
+  }
+
+  tips.push('📱 Call labs to confirm prices - they vary');
+  tips.push('🏥 Government hospitals cheaper but longer wait times');
+  tips.push('💳 Some labs accept insurance - check with your provider');
+
+  return {
+    totalTests: allTests.length,
+    totalCostMin,
+    totalCostMax,
+    urgent,
+    high,
+    medium,
+    fastingRequired,
+    fastingTests,
+    packageSuggestions: packages,
+    tips,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// HABIT REDUCTION CALCULATOR (Detailed with Scientific Reasons)
+// ══════════════════════════════════════════════════════════════
+
+export interface HabitReductionPlan {
+  habitName: string;
+  emoji: string;
+  currentAmount: number;
+  unit: string;
+  safeLimit: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'very-high';
+  riskColor: string;
+  
+  // Health risks
+  healthRisks: {
+    risk: string;
+    severity: 'mild' | 'moderate' | 'severe';
+    explanation: string;
+  }[];
+  
+  // Personalized risks (based on user conditions)
+  personalizedRisks: {
+    condition: string;
+    impact: string;
+    urgency: 'low' | 'medium' | 'high';
+  }[];
+  
+  // 4-week plan
+  weeks: {
+    week: number;
+    target: number;
+    reduction: number;
+    reductionPercent: number;
+    howTo: string;
+    replaceWith: string;
+    tip: string;
+    whyThisMatters: string;
+  }[];
+  
+  // Expected benefits
+  expectedBenefits: {
+    benefit: string;
+    timeline: string;
+    emoji: string;
+  }[];
+  
+  // Withdrawal symptoms
+  withdrawalSymptoms: {
+    symptom: string;
+    when: string;
+    howToManage: string;
+    severity: 'mild' | 'moderate' | 'severe';
+  }[];
+  
+  // When to speed up/slow down
+  adjustmentGuidance: {
+    speedUp: string[];
+    slowDown: string[];
+    restart: string[];
+  };
+  
+  // Success tips
+  successTips: string[];
+}
+
+export function generateHabitReductionPlan(
+  habitId: string,
+  currentAmount: number,
+  conditions: string[],
+  symptoms: string[]
+): HabitReductionPlan {
+  
+  // ── COFFEE REDUCTION ───────────────────────────────────────
+  if (habitId === 'drink_coffee') {
+    const hasDiabetes = conditions.some(c => c.includes('diabetes'));
+    const hasHeart = conditions.some(c => ['hypertension', 'heart_disease', 'arrhythmia'].includes(c));
+    const hasAnxiety = conditions.includes('anxiety') || symptoms.includes('sym_anxious');
+    const hasSleep = symptoms.includes('sym_sleepy') || conditions.includes('insomnia');
+    
+    const riskLevel = currentAmount >= 5 ? 'high' : currentAmount >= 3 ? 'medium' : 'low';
+    
+    const healthRisks = [
+      {
+        risk: 'Anxiety and jitteriness',
+        severity: 'moderate' as const,
+        explanation: 'Caffeine stimulates stress hormones (cortisol, adrenaline) causing nervous feeling',
+      },
+      {
+        risk: 'Sleep disruption',
+        severity: 'severe' as const,
+        explanation: 'Caffeine half-life is 5-6 hours - coffee at 2pm still affects sleep at 10pm',
+      },
+      {
+        risk: 'Blood pressure increase',
+        severity: 'moderate' as const,
+        explanation: 'Temporary BP spike of 5-10 mmHg for 1-3 hours after each cup',
+      },
+      {
+        risk: 'Magnesium depletion',
+        severity: 'moderate' as const,
+        explanation: 'Caffeine increases magnesium excretion in urine → deficiency → cramps, fatigue',
+      },
+      {
+        risk: 'Stomach acid issues',
+        severity: 'mild' as const,
+        explanation: 'Coffee stimulates acid production → heartburn, gastritis (especially on empty stomach)',
+      },
+    ];
+    
+    const personalizedRisks = [];
+    if (hasDiabetes) {
+      personalizedRisks.push({
+        condition: 'Diabetes',
+        impact: 'Coffee can cause blood sugar spikes and crashes - makes control harder',
+        urgency: 'high' as const,
+      });
+    }
+    if (hasHeart) {
+      personalizedRisks.push({
+        condition: 'Heart/Blood Pressure',
+        impact: 'Each cup raises BP by 5-10 mmHg temporarily - adds to medication workload',
+        urgency: 'high' as const,
+      });
+    }
+    if (hasAnxiety) {
+      personalizedRisks.push({
+        condition: 'Anxiety',
+        impact: 'Caffeine worsens anxiety by triggering stress hormone release',
+        urgency: 'high' as const,
+      });
+    }
+    if (hasSleep) {
+      personalizedRisks.push({
+        condition: 'Sleep Issues',
+        impact: 'Poor sleep worsens everything: blood sugar, BP, mood, weight',
+        urgency: 'high' as const,
+      });
+    }
+    
+    const weeks = [
+      {
+        week: 1,
+        target: Math.max(1, Math.round(currentAmount * 0.8)),
+        reduction: Math.round(currentAmount * 0.2),
+        reductionPercent: 20,
+        howTo: 'Skip the last cup of the day',
+        replaceWith: 'Green tea (half the caffeine, antioxidants)',
+        tip: 'No coffee after 2pm - protects sleep quality',
+        whyThisMatters: hasSleep 
+          ? 'Better sleep → better blood sugar control, lower stress, easier weight loss'
+          : 'Gradual reduction prevents severe withdrawal headaches',
+      },
+      {
+        week: 2,
+        target: Math.max(1, Math.round(currentAmount * 0.6)),
+        reduction: Math.round(currentAmount * 0.4),
+        reductionPercent: 40,
+        howTo: 'Skip mid-afternoon cup',
+        replaceWith: 'Herbal tea (chamomile, mint) - zero caffeine',
+        tip: 'Drink coffee AFTER meals (not on empty stomach)',
+        whyThisMatters: hasDiabetes
+          ? 'Coffee on empty stomach spikes cortisol → raises blood sugar'
+          : 'Reduces stomach acid issues and crashes',
+      },
+      {
+        week: 3,
+        target: Math.max(1, Math.round(currentAmount * 0.4)),
+        reduction: Math.round(currentAmount * 0.6),
+        reductionPercent: 60,
+        howTo: 'Only morning + early afternoon (before 12pm)',
+        replaceWith: 'Warm lemon water (energizing, no caffeine)',
+        tip: 'Start magnesium supplement (200mg before bed)',
+        whyThisMatters: 'High coffee intake depletes magnesium → you need to replenish it',
+      },
+      {
+        week: 4,
+        target: Math.max(1, 2),
+        reduction: Math.round(currentAmount - 2),
+        reductionPercent: Math.round(((currentAmount - 2) / currentAmount) * 100),
+        howTo: 'Morning coffee only OR morning + lunch',
+        replaceWith: 'Decaf coffee (tastes same, no withdrawal)',
+        tip: '1-2 cups = SAFE ZONE - maintain this long-term',
+        whyThisMatters: 'You reduced by 60-80%! Celebrate this achievement 🎉',
+      },
+    ];
+    
+    const expectedBenefits = [
+      { benefit: 'Better sleep quality (fall asleep faster, sleep deeper)', timeline: 'Week 1-2', emoji: '😴' },
+      { benefit: 'More stable energy (no 3pm crash)', timeline: 'Week 2-3', emoji: '⚡' },
+      { benefit: 'Lower anxiety and jitteriness', timeline: 'Week 2-4', emoji: '😌' },
+      { benefit: 'Better blood sugar control', timeline: 'Week 3-4', emoji: '🩸' },
+      { benefit: 'Lower blood pressure (5-10 mmHg drop)', timeline: 'Week 3-4', emoji: '🫀' },
+      { benefit: 'Less stomach acid/heartburn', timeline: 'Week 1-2', emoji: '🔥' },
+    ];
+    
+    const withdrawalSymptoms = [
+      {
+        symptom: 'Headache (most common)',
+        when: 'Days 1-5 (peaks day 2-3)',
+        howToManage: 'Drink 2-3L water, take painkiller if severe, drink green tea (small caffeine)',
+        severity: 'moderate' as const,
+      },
+      {
+        symptom: 'Fatigue and low energy',
+        when: 'Days 1-7',
+        howToManage: 'Temporary - will pass. Get 8 hours sleep, eat protein, go for walk',
+        severity: 'moderate' as const,
+      },
+      {
+        symptom: 'Irritability and mood changes',
+        when: 'Days 1-5',
+        howToManage: 'Be patient with yourself. Warn family. Exercise helps.',
+        severity: 'mild' as const,
+      },
+      {
+        symptom: 'Difficulty concentrating',
+        when: 'Days 1-4',
+        howToManage: 'Schedule important work for later. Temporary brain fog.',
+        severity: 'mild' as const,
+      },
+    ];
+    
+    const adjustmentGuidance = {
+      speedUp: [
+        'If feeling great with no symptoms → reduce faster',
+        'If headaches mild → continue as planned',
+      ],
+      slowDown: [
+        'If headaches SEVERE (can\'t function) → reduce by 0.5 cups instead',
+        'If extreme fatigue → slow down, maybe stay at current level 1 more week',
+      ],
+      restart: [
+        'If you relapse (drink 5 cups again) → don\'t quit! Restart from current level',
+        'Progress is not linear - setbacks are normal',
+      ],
+    };
+    
+    const successTips = [
+      '☕ Switch to smaller cup size (makes reduction easier)',
+      '🌡 Drink water first when craving (often thirst, not caffeine need)',
+      '⏰ Have a schedule (e.g., 8am + 11am only)',
+      '🚫 Remove coffee maker from bedroom (out of sight)',
+      '👥 Tell family/friends for accountability',
+      '📝 Track daily intake (makes you aware)',
+      '🎯 Focus on benefits (better sleep) not deprivation',
+      '💪 Replace habit: coffee break → 5-min walk break',
+    ];
+    
+    return {
+      habitName: 'Coffee',
+      emoji: '☕',
+      currentAmount,
+      unit: 'cups/day',
+      safeLimit: 2,
+      riskLevel,
+      riskColor: riskLevel === 'high' ? '#FF6B6B' : riskLevel === 'medium' ? '#FF9D4D' : '#4DFF9E',
+      healthRisks,
+      personalizedRisks,
+      weeks,
+      expectedBenefits,
+      withdrawalSymptoms,
+      adjustmentGuidance,
+      successTips,
+    };
+  }
+  
+  // ── SODA REDUCTION ─────────────────────────────────────────
+  if (habitId === 'drink_soda') {
+    const hasDiabetes = conditions.some(c => c.includes('diabetes'));
+    const hasObesity = conditions.includes('obesity');
+    const hasFattyLiver = conditions.includes('fatty_liver');
+    
+    const healthRisks = [
+      {
+        risk: 'Massive blood sugar spikes',
+        severity: 'severe' as const,
+        explanation: '1 can = 10 teaspoons sugar → blood sugar shoots up in 20 minutes',
+      },
+      {
+        risk: 'Weight gain and belly fat',
+        severity: 'severe' as const,
+        explanation: 'Liquid sugar bypasses satiety signals → body stores as fat',
+      },
+      {
+        risk: 'Fatty liver disease',
+        severity: 'severe' as const,
+        explanation: 'Fructose (in soda) is processed in liver → fat buildup',
+      },
+      {
+        risk: 'Tooth decay',
+        severity: 'moderate' as const,
+        explanation: 'Acid + sugar erodes enamel rapidly',
+      },
+      {
+        risk: 'Insulin resistance',
+        severity: 'severe' as const,
+        explanation: 'Repeated sugar spikes → body stops responding to insulin → diabetes',
+      },
+    ];
+    
+    const personalizedRisks = [];
+    if (hasDiabetes) {
+      personalizedRisks.push({
+        condition: 'Diabetes',
+        impact: '1 can of soda can raise blood sugar by 50-100 mg/dL - extremely dangerous',
+        urgency: 'high' as const,
+      });
+    }
+    if (hasObesity || hasFattyLiver) {
+      personalizedRisks.push({
+        condition: 'Obesity/Fatty Liver',
+        impact: 'Soda is the #1 cause of fatty liver - must eliminate completely',
+        urgency: 'high' as const,
+      });
+    }
+    
+    const weeks = [
+      {
+        week: 1,
+        target: Math.max(0, Math.ceil(currentAmount / 2)),
+        reduction: Math.floor(currentAmount / 2),
+        reductionPercent: 50,
+        howTo: 'Cut in HALF immediately',
+        replaceWith: 'Sparkling water + fresh lemon/mint',
+        tip: 'Carbonation satisfies the fizz craving without sugar',
+        whyThisMatters: hasDiabetes ? 'Your blood sugar will improve immediately' : 'Fast results motivate you',
+      },
+      {
+        week: 2,
+        target: 0,
+        reduction: currentAmount,
+        reductionPercent: 100,
+        howTo: 'ZERO soda - complete stop',
+        replaceWith: 'Iced herbal tea (karkadeh) - naturally sweet, zero sugar',
+        tip: 'Remove all soda from house - out of sight, out of mind',
+        whyThisMatters: 'Soda has ZERO nutritional value - only harm',
+      },
+      {
+        week: 3,
+        target: 0,
+        reduction: currentAmount,
+        reductionPercent: 100,
+        howTo: 'Stay at ZERO',
+        replaceWith: 'Fresh pomegranate juice (dilute 50/50 with water)',
+        tip: 'If craving sweetness, eat whole fruit (fiber slows sugar)',
+        whyThisMatters: 'Your liver is healing now',
+      },
+      {
+        week: 4,
+        target: 0,
+        reduction: currentAmount,
+        reductionPercent: 100,
+        howTo: 'Maintain ZERO soda',
+        replaceWith: 'Infused water (cucumber, mint, lemon)',
+        tip: 'Celebrate 1 month soda-free! 🎉',
+        whyThisMatters: 'You broke the addiction - maintain it',
+      },
+    ];
+    
+    const expectedBenefits = [
+      { benefit: 'Weight loss (2-4 kg in 1 month)', timeline: 'Week 2-4', emoji: '⚖️' },
+      { benefit: 'Stable blood sugar (no spikes/crashes)', timeline: 'Week 1-2', emoji: '🩸' },
+      { benefit: 'More sustained energy', timeline: 'Week 1-3', emoji: '⚡' },
+      { benefit: 'Better skin (less acne)', timeline: 'Week 3-4', emoji: '✨' },
+      { benefit: 'Reduced fatty liver', timeline: 'Week 4+', emoji: '🫘' },
+      { benefit: 'Less sugar cravings', timeline: 'Week 2-3', emoji: '🍬' },
+    ];
+    
+    const withdrawalSymptoms = [
+      {
+        symptom: 'Strong sugar cravings',
+        when: 'Days 1-10',
+        howToManage: 'Eat whole fruit, drink flavored sparkling water',
+        severity: 'moderate' as const,
+      },
+      {
+        symptom: 'Headache (sugar withdrawal)',
+        when: 'Days 1-3',
+        howToManage: 'Drink water, eat protein, takes 3 days to pass',
+        severity: 'mild' as const,
+      },
+    ];
+    
+    return {
+      habitName: 'Soft Drinks (Soda)',
+      emoji: '🥤',
+      currentAmount,
+      unit: 'cans/day',
+      safeLimit: 0,
+      riskLevel: 'very-high',
+      riskColor: '#FF6B6B',
+      healthRisks,
+      personalizedRisks,
+      weeks,
+      expectedBenefits,
+      withdrawalSymptoms,
+      adjustmentGuidance: {
+        speedUp: ['Soda must be eliminated - no "moderation" option'],
+        slowDown: ['If struggling, Week 1 can be 2 weeks (slower cut)'],
+        restart: ['If relapse, start over - don\'t give up'],
+      },
+      successTips: [
+        '🚫 Remove ALL soda from house immediately',
+        '🛒 Don\'t buy it - if it\'s not home, you won\'t drink it',
+        '💧 Drink water BEFORE meals (reduces cravings)',
+        '🍊 Keep fresh fruit visible (healthy sweet option)',
+        '📝 Track your blood sugar - see the improvement!',
+        '💰 Calculate money saved (150 EGP/month → 1800 EGP/year!)',
+      ],
+    };
+  }
+  
+  // ── SMOKING REDUCTION ──────────────────────────────────────
+  if (habitId === 'hab_smoke') {
+    const healthRisks = [
+      {
+        risk: 'Lung cancer and COPD',
+        severity: 'severe' as const,
+        explanation: '#1 cause of preventable death - 1 in 2 smokers die from smoking',
+      },
+      {
+        risk: 'Heart disease and stroke',
+        severity: 'severe' as const,
+        explanation: 'Damages blood vessels, raises BP, increases clot risk',
+      },
+      {
+        risk: 'Worsens all chronic conditions',
+        severity: 'severe' as const,
+        explanation: 'Makes diabetes, asthma, heart disease 10x worse',
+      },
+    ];
+    
+    const weeks = [
+      {
+        week: 1,
+        target: Math.max(0, Math.round(currentAmount * 0.75)),
+        reduction: Math.round(currentAmount * 0.25),
+        reductionPercent: 25,
+        howTo: 'Identify triggers (after coffee, stress) - skip those cigarettes first',
+        replaceWith: 'Nicotine gum or patches (consult pharmacist)',
+        tip: 'Delay each cigarette by 10 minutes (often craving passes)',
+        whyThisMatters: 'Gradual reduction + nicotine replacement prevents severe withdrawal',
+      },
+      {
+        week: 2,
+        target: Math.max(0, Math.round(currentAmount * 0.5)),
+        reduction: Math.round(currentAmount * 0.5),
+        reductionPercent: 50,
+        howTo: 'Set no-smoking zones (car, bedroom)',
+        replaceWith: 'Deep breathing exercises when craving hits',
+        tip: 'Tell friends/family - ask for support',
+        whyThisMatters: 'Social support doubles quit success rate',
+      },
+      {
+        week: 3,
+        target: Math.max(0, Math.round(currentAmount * 0.25)),
+        reduction: Math.round(currentAmount * 0.75),
+        reductionPercent: 75,
+        howTo: 'Pick a quit date this week',
+        replaceWith: 'Nicotine replacement + behavioral support',
+        tip: 'Remove all cigarettes, lighters, ashtrays from house',
+        whyThisMatters: 'Environment change is critical',
+      },
+      {
+        week: 4,
+        target: 0,
+        reduction: currentAmount,
+        reductionPercent: 100,
+        howTo: 'QUIT completely - no "just one"',
+        replaceWith: 'Nicotine replacement for 8-12 weeks',
+        tip: 'Consider professional help (hotline 16023 in Egypt)',
+        whyThisMatters: 'Within hours: heart rate and BP drop. Within days: lung function improves.',
+      },
+    ];
+    
+    return {
+      habitName: 'Smoking',
+      emoji: '🚬',
+      currentAmount,
+      unit: 'cigarettes/day',
+      safeLimit: 0,
+      riskLevel: 'very-high',
+      riskColor: '#FF0000',
+      healthRisks,
+      personalizedRisks: [
+        {
+          condition: 'All conditions',
+          impact: 'Smoking worsens EVERY health condition you have',
+          urgency: 'high' as const,
+        },
+      ],
+      weeks,
+      expectedBenefits: [
+        { benefit: 'Heart rate and BP drop', timeline: '20 minutes after quitting', emoji: '🫀' },
+        { benefit: 'Oxygen levels normalize', timeline: '12 hours', emoji: '💨' },
+        { benefit: 'Lung function improves 30%', timeline: '2 weeks - 3 months', emoji: '🫁' },
+        { benefit: 'Heart attack risk drops 50%', timeline: '1 year', emoji: '❤️' },
+        { benefit: 'Lung cancer risk drops 50%', timeline: '10 years', emoji: '🎗' },
+      ],
+      withdrawalSymptoms: [
+        {
+          symptom: 'Intense nicotine cravings',
+          when: 'Days 1-14 (peaks day 3)',
+          howToManage: 'Nicotine replacement therapy (gum, patches) - consult pharmacist',
+          severity: 'severe' as const,
+        },
+        {
+          symptom: 'Irritability, anxiety, anger',
+          when: 'Days 1-30',
+          howToManage: 'Exercise, deep breathing, support groups',
+          severity: 'severe' as const,
+        },
+      ],
+      adjustmentGuidance: {
+        speedUp: ['If ready to quit sooner - DO IT! No need to wait'],
+        slowDown: ['Quitting is hard - use nicotine replacement, don\'t go cold turkey'],
+        restart: ['Most smokers try 5-7 times before succeeding - don\'t give up'],
+      },
+      successTips: [
+        '☎️ Call quitline: 16023 (Egypt Ministry of Health)',
+        '💊 Nicotine patches + gum (doubles success rate)',
+        '👥 Join support group or online community',
+        '💰 Track money saved (pack = 50 EGP → 1500 EGP/month!)',
+        '📝 Write list of reasons to quit - read when craving',
+        '🏃 Exercise when craving hits (releases endorphins)',
+        '🚫 Avoid alcohol first month (triggers relapse)',
+        '🩺 See doctor - prescription medications (Champix) help',
+      ],
+    };
+  }
+  
+  // ── DEFAULT (FALLBACK) ─────────────────────────────────────
+  return {
+    habitName: 'Habit',
+    emoji: '❓',
+    currentAmount,
+    unit: 'units',
+    safeLimit: 0,
+    riskLevel: 'medium',
+    riskColor: '#FF9D4D',
+    healthRisks: [],
+    personalizedRisks: [],
+    weeks: [],
+    expectedBenefits: [],
+    withdrawalSymptoms: [],
+    adjustmentGuidance: { speedUp: [], slowDown: [], restart: [] },
+    successTips: [],
+  };
+}

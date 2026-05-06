@@ -5,17 +5,17 @@
 
 export interface HabitDetail {
   habitName: string;
-  dailyAmount: number;        // كام مرة/كوباية في اليوم
+  dailyAmount: number;        // Times/cups per day
   unit: string;               // 'cups' | 'cans' | 'times' | 'cigarettes'
 }
 
 export interface WeeklyHabitPlan {
   week: number;
-  target: number;             // الهدف للأسبوع ده
-  reduction: number;          // قد إيه هيقل
-  tips: string[];             // نصايح الأسبوع
-  replacement: string;        // البديل الصحي
-  warning?: string;           // تحذير طبي لو فيه
+  target: number;             // Target for the week
+  reduction: number;          // How much it decreases
+  tips: string[];             // Weekly tips
+  replacement: string;        // Healthy replacement
+  warning?: string;           // Medical warning if any
 }
 
 export interface HabitPlan {
@@ -29,7 +29,7 @@ export interface HabitPlan {
   alternatives: { name: string; benefit: string; emoji: string }[];
 }
 
-// ── أسئلة لكل عادة ─────────────────────────────────────────
+// ── Questions for each habit ─────────────────────────────────
 export const HABIT_QUESTIONS: Record<string, {
   question: string;
   unit: string;
@@ -38,118 +38,117 @@ export const HABIT_QUESTIONS: Record<string, {
   color: string;
 }> = {
   'Heavy Coffee': {
-    question: 'كام كوباية قهوة بتشرب في اليوم؟',
+    question: 'How many cups of coffee do you drink per day?',
     unit: 'cups/day',
     icon: '☕',
     color: '#8B4513',
     options: [
-      { label: '1-2 كوباية', value: 2 },
-      { label: '3-4 كوبايات', value: 4 },
-      { label: '5-6 كوبايات', value: 6 },
-      { label: '+7 كوبايات', value: 8 },
+      { label: '1-2 cups', value: 2 },
+      { label: '3-4 cups', value: 4 },
+      { label: '5-6 cups', value: 6 },
+      { label: '7+ cups', value: 8 },
     ],
   },
   'Heavy Tea': {
-    question: 'كام كوباية شاي بتشرب في اليوم؟',
+    question: 'How many cups of tea do you drink per day?',
     unit: 'cups/day',
     icon: '🍵',
     color: '#8B6914',
     options: [
-      { label: '2-3 كوبايات', value: 3 },
-      { label: '4-5 كوبايات', value: 5 },
-      { label: '6-8 كوبايات', value: 7 },
-      { label: '+8 كوبايات', value: 10 },
+      { label: '2-3 cups', value: 3 },
+      { label: '4-5 cups', value: 5 },
+      { label: '6-8 cups', value: 7 },
+      { label: '8+ cups', value: 10 },
     ],
   },
   'Soft Drinks': {
-    question: 'كام علبة/كوباية سوفت درينك في اليوم؟',
+    question: 'How many cans or cups of soft drinks do you drink per day?',
     unit: 'cans/day',
     icon: '🥤',
     color: '#CC4400',
     options: [
-      { label: '1 علبة', value: 1 },
-      { label: '2 علبة', value: 2 },
-      { label: '3-4 علبة', value: 4 },
-      { label: '+4 علبة', value: 6 },
+      { label: '1 can', value: 1 },
+      { label: '2 cans', value: 2 },
+      { label: '3-4 cans', value: 4 },
+      { label: 'More than 4 cans', value: 6 },
     ],
   },
   'Energy Drinks': {
-    question: 'كام علبة إينيرجي درينك في اليوم؟',
+    question: 'How many energy drink cans do you drink per day?',
     unit: 'cans/day',
     icon: '⚡',
     color: '#FFD700',
     options: [
-      { label: '1 علبة', value: 1 },
-      { label: '2 علبة', value: 2 },
-      { label: '3 علبة', value: 3 },
-      { label: '+3 علبة', value: 4 },
+      { label: '1 can', value: 1 },
+      { label: '2 cans', value: 2 },
+      { label: '3 cans', value: 3 },
+      { label: 'More than 3 cans', value: 4 },
     ],
   },
   'Alcohol': {
-    question: 'كام مرة في الأسبوع؟',
+    question: 'How many times per week do you drink alcohol?',
     unit: 'times/week',
     icon: '🍺',
     color: '#DAA520',
     options: [
-      { label: '1-2 مرة', value: 2 },
-      { label: '3-4 مرات', value: 4 },
-      { label: '5-6 مرات', value: 6 },
-      { label: 'يومياً', value: 7 },
+      { label: '1-2 times', value: 2 },
+      { label: '3-4 times', value: 4 },
+      { label: '5-6 times', value: 6 },
+      { label: 'Daily', value: 7 },
     ],
   },
   'Smoking': {
-    question: 'كام سيجارة في اليوم؟',
+    question: 'How many cigarettes do you smoke per day?',
     unit: 'cigarettes/day',
     icon: '🚬',
     color: '#708090',
     options: [
-      { label: '1-5 سجاير', value: 5 },
-      { label: '6-10 سجاير', value: 10 },
-      { label: '11-20 سيجارة', value: 20 },
-      { label: '+20 سيجارة', value: 25 },
+      { label: '1-5 cigarettes', value: 5 },
+      { label: '6-10 cigarettes', value: 10 },
+      { label: '11-20 cigarettes', value: 20 },
+      { label: 'More than 20 cigarettes', value: 25 },
     ],
   },
   'High Sugar Diet': {
-    question: 'كام مرة بتاكل حلويات/سكر في اليوم؟',
+    question: 'How many times per day do you eat sweets or sugar?',
     unit: 'times/day',
     icon: '🍩',
     color: '#FF69B4',
     options: [
-      { label: '1-2 مرة', value: 2 },
-      { label: '3-4 مرات', value: 4 },
-      { label: '5-6 مرات', value: 6 },
-      { label: 'كل شوية', value: 8 },
+      { label: '1-2 times', value: 2 },
+      { label: '3-4 times', value: 4 },
+      { label: '5-6 times', value: 6 },
+      { label: 'All the time', value: 8 },
     ],
   },
 };
 
-// ── منطق بناء الخطة التدريجية ──────────────────────────────
+// ── Progressive plan generation logic ────────────────────────
 export function generateHabitPlan(habitName: string, dailyAmount: number): HabitPlan {
   const plans: Record<string, (amount: number) => HabitPlan> = {
-
     'Heavy Coffee': (amount) => ({
       habitName: 'Heavy Coffee',
       icon: '☕',
       currentAmount: amount,
       unit: 'cups/day',
       healthRisks: [
-        'قلق واضطراب في النوم لو أكتر من 4 كوبايات',
-        'ارتفاع ضغط الدم مؤقت',
-        'إدمان الكافيين وصداع عند الوقف',
-        'نقص امتصاص الحديد والكالسيوم',
+        'Anxiety and sleep disturbances if you drink more than 4 cups',
+        'Temporary blood pressure increase',
+        'Caffeine dependence and headaches when stopping',
+        'Reduced iron and calcium absorption',
       ],
       weeklyPlans: buildReductionPlan(amount, 1, [
-        { replacement: 'شاي أخضر (أقل كافيين)', tip: 'استبدل آخر كوباية قهوة بشاي أخضر' },
-        { replacement: 'شاي أعشاب (كاموميل/نعناع)', tip: 'شرب القهوة بعد الأكل مش على معدة فاضية' },
-        { replacement: 'ماء دافي بليمون صبح', tip: 'ابدأ يومك بكوباية ماء قبل القهوة' },
-        { replacement: 'قهوة منزوعة الكافيين', tip: 'القهوة بعد 2pm بتضر النوم - امنعها تماماً' },
+        { replacement: 'Green tea (less caffeine)', tip: 'Replace your last cup of coffee with green tea' },
+        { replacement: 'Herbal tea (chamomile/mint)', tip: 'Drink coffee after meals, not on an empty stomach' },
+        { replacement: 'Warm lemon water in the morning', tip: 'Start your day with a glass of water before coffee' },
+        { replacement: 'Decaf coffee', tip: 'Coffee after 2 PM hurts sleep - avoid it completely' },
       ]),
       finalGoal: 1,
       alternatives: [
-        { name: 'شاي أخضر', benefit: 'فيه L-theanine يهدي ويركز بدون قلق', emoji: '🍃' },
-        { name: 'شاي كاموميل', benefit: 'يهدي الأعصاب ويحسن النوم', emoji: '🌼' },
-        { name: 'ماء بليمون وزنجبيل', benefit: 'ينشط الجسم ويحرق دهون', emoji: '🍋' },
-        { name: 'شيكولاتة داكنة 70%', benefit: 'كافيين طبيعي خفيف مع مضادات أكسدة', emoji: '🍫' },
+        { name: 'Green tea', benefit: 'Contains L-theanine for calm focus without anxiety', emoji: '🍃' },
+        { name: 'Chamomile tea', benefit: 'Calms the nerves and improves sleep', emoji: '🌼' },
+        { name: 'Lemon ginger water', benefit: 'Refreshes the body and supports digestion', emoji: '🍋' },
+        { name: 'Dark chocolate 70%', benefit: 'Light natural caffeine with antioxidants', emoji: '🍫' },
       ],
     }),
 
@@ -159,24 +158,24 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
       currentAmount: amount,
       unit: 'cans/day',
       healthRisks: [
-        `${amount} علبة في اليوم = ${amount * 39}g سكر زيادة يومياً`,
-        'مخاطر السكري النوع 2 بتزيد 26%',
-        'تآكل مينا الأسنان من الحمض',
-        'زيادة الوزن والدهون حول البطن',
-        'الإدمان على السكر يسبب نهم مستمر',
+        `${amount} cans per day = ${amount * 39}g of extra sugar daily`,
+        'Type 2 diabetes risk increases by 26%',
+        'Tooth enamel erosion from acidity',
+        'Weight gain and belly fat',
+        'Sugar dependence causes constant cravings',
       ],
       weeklyPlans: buildReductionPlan(amount, 0, [
-        { replacement: 'مياه فوارة بنعناع وليمون', tip: 'استبدل علبة بمياه فوارة طبيعية - نفس الإحساس الفوار' },
-        { replacement: 'عصير طبيعي مخفف بمياه', tip: 'لو حسيت بنهم للحلو - اعمل عصير طازج بنص ماء' },
-        { replacement: 'شاي مثلج بدون سكر', tip: 'جرب شاي مثلج بنعناع بارد في البراد' },
-        { replacement: 'ماء عادي مع شرائح فاكهة', tip: 'الأسبوع ده: صفر سوفت درينك - انت قادر!' },
+        { replacement: 'Sparkling water with mint and lemon', tip: 'Replace one can with a natural sparkling drink - same fizzy feeling' },
+        { replacement: 'Diluted fresh juice', tip: 'If you crave something sweet, make fresh juice with half water' },
+        { replacement: 'Unsweetened iced tea', tip: 'Try cold mint tea stored in the fridge' },
+        { replacement: 'Plain water with fruit slices', tip: 'This week: zero soft drinks - you can do it!' },
       ]),
       finalGoal: 0,
       alternatives: [
-        { name: 'مياه فوارة طبيعية', benefit: 'نفس الإحساس الفوار بدون سكر أو كالوريز', emoji: '💧' },
-        { name: 'كركديه بارد بدون سكر', benefit: 'مضادات أكسدة عالية وخافض للضغط', emoji: '🌺' },
-        { name: 'عصير رمان طازج', benefit: 'أقوى مضاد أكسدة طبيعي', emoji: '🍎' },
-        { name: 'ماء جوز هند', benefit: 'كالسيوم وبوتاسيوم طبيعي وحلو', emoji: '🥥' },
+        { name: 'Natural sparkling water', benefit: 'Same fizzy sensation without sugar or calories', emoji: '💧' },
+        { name: 'Cold hibiscus tea without sugar', benefit: 'High in antioxidants and supports blood pressure', emoji: '🌺' },
+        { name: 'Fresh pomegranate juice', benefit: 'A powerful natural antioxidant drink', emoji: '🍎' },
+        { name: 'Coconut water', benefit: 'Natural potassium and calcium with a sweet taste', emoji: '🥥' },
       ],
     }),
 
@@ -186,23 +185,23 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
       currentAmount: amount,
       unit: 'cups/day',
       healthRisks: [
-        'الشاي التقيل بيقلل امتصاص الحديد بنسبة 60%',
-        'خطر فقر الدم خصوصاً للستات',
-        'التانين في الشاي بيضر المعدة على صيام',
-        'الكافيين بيأثر على النوم لو بعد 4pm',
+        'Strong tea reduces iron absorption by 60%',
+        'Higher risk of anemia, especially for women',
+        'Tea tannins can irritate the stomach on an empty stomach',
+        'Caffeine may affect sleep if taken after 4 PM',
       ],
       weeklyPlans: buildReductionPlan(amount, 2, [
-        { replacement: 'شاي أخضر خفيف', tip: 'خفف الشاي - متمرش أكتر من 3 دقايق' },
-        { replacement: 'شاي أعشاب (زعتر/نعناع)', tip: 'استبدل كوباية بشاي أعشاب بعد الأكل' },
-        { replacement: 'كركديه دافي بدون سكر', tip: 'الشاي مع الأكل بيمنع امتصاص الحديد - فصل ساعة' },
-        { replacement: 'ماء دافي بزنجبيل وليمون', tip: 'احسب كوبايتك بس - مش أكتر' },
+        { replacement: 'Light green tea', tip: 'Brew the tea lighter - do not steep for more than 3 minutes' },
+        { replacement: 'Herbal tea (thyme/mint)', tip: 'Replace one cup with herbal tea after meals' },
+        { replacement: 'Warm hibiscus tea without sugar', tip: 'Tea with meals blocks iron absorption - leave a one-hour gap' },
+        { replacement: 'Warm ginger lemon water', tip: 'Count your cups - no more than that' },
       ]),
       finalGoal: 2,
       alternatives: [
-        { name: 'شاي أخضر خفيف', benefit: 'أقل تانين وكافيين - أأمن للمعدة', emoji: '🍃' },
-        { name: 'شاي زعتر', benefit: 'مضاد بكتيري طبيعي ومفيد للجهاز التنفسي', emoji: '🌿' },
-        { name: 'كركديه', benefit: 'خافض للضغط ومليان فيتامين C', emoji: '🌺' },
-        { name: 'يانسون دافي', benefit: 'يهدي المعدة ويقلل الانتفاخ', emoji: '⭐' },
+        { name: 'Light green tea', benefit: 'Lower tannins and caffeine - gentler on the stomach', emoji: '🍃' },
+        { name: 'Thyme tea', benefit: 'A natural antibacterial drink that supports breathing', emoji: '🌿' },
+        { name: 'Hibiscus tea', benefit: 'Helps lower blood pressure and is rich in vitamin C', emoji: '🌺' },
+        { name: 'Warm anise tea', benefit: 'Soothes the stomach and reduces bloating', emoji: '⭐' },
       ],
     }),
 
@@ -212,24 +211,24 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
       currentAmount: amount,
       unit: 'cans/day',
       healthRisks: [
-        `${amount} علبة = ${amount * 80}mg كافيين + ${amount * 27}g سكر يومياً`,
-        'خطر اضطراب نبضات القلب',
-        'ارتفاع حاد في ضغط الدم',
-        'اعتماد نفسي وجسدي قوي جداً',
-        'ضعف عام وإرهاق أشد لما يخلص المفعول',
+        `${amount} cans = ${amount * 80}mg caffeine + ${amount * 27}g sugar daily`,
+        'Risk of irregular heartbeat',
+        'Sudden blood pressure spikes',
+        'Strong mental and physical dependence',
+        'Severe fatigue when the effect wears off',
       ],
       weeklyPlans: buildReductionPlan(amount, 0, [
-        { replacement: 'قهوة سوداء طبيعية', tip: 'استبدل بقهوة سوداء - نفس الكافيين بدون إضافات ضارة' },
-        { replacement: 'موز + قهوة خفيفة', tip: 'الموز بيديك طاقة تدريجية ثابتة لساعات' },
-        { replacement: 'ماء جوز هند + شيكولاتة داكنة', tip: 'إينيرجي طبيعي من الطبيعة' },
-        { replacement: 'نوم كافي 7-8 ساعات', tip: 'الإرهاق هو السبب - حل المشكلة من جذرها' },
+        { replacement: 'Black coffee', tip: 'Replace it with black coffee - same caffeine without harmful additives' },
+        { replacement: 'Banana + light coffee', tip: 'Banana gives you steady energy for hours' },
+        { replacement: 'Coconut water + dark chocolate', tip: 'Natural energy from whole foods' },
+        { replacement: '7-8 hours of sleep', tip: 'Fatigue is the root cause - solve it from the source' },
       ]),
       finalGoal: 0,
       alternatives: [
-        { name: 'قهوة سوداء طبيعية', benefit: 'كافيين نقي بدون سكر أو تورين', emoji: '☕' },
-        { name: 'موز + لوز', benefit: 'طاقة طبيعية تدوم 3-4 ساعات', emoji: '🍌' },
-        { name: 'ماء جوز هند', benefit: 'إلكتروليت طبيعي ومنشط', emoji: '🥥' },
-        { name: 'شاي أخضر ماتشا', benefit: 'كافيين + L-theanine = تركيز بدون قلق', emoji: '🍵' },
+        { name: 'Black coffee', benefit: 'Pure caffeine without sugar or taurine', emoji: '☕' },
+        { name: 'Banana + almonds', benefit: 'Natural energy that lasts 3-4 hours', emoji: '🍌' },
+        { name: 'Coconut water', benefit: 'Natural electrolytes and a refreshing boost', emoji: '🥥' },
+        { name: 'Matcha tea', benefit: 'Caffeine + L-theanine = focus without anxiety', emoji: '🍵' },
       ],
     }),
 
@@ -239,24 +238,24 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
       currentAmount: amount,
       unit: 'times/day',
       healthRisks: [
-        'الإدمان على السكر حقيقي ويشبه إدمان المواد',
-        `${amount} مرات يومياً بترفع سكر الدم وتخليه يهبط فجأة`,
-        'دورة نهم لا تنتهي: أكل سكر ← هبوط ← نهم تاني',
-        'مخاطر السكري والالتهابات المزمنة',
-        'زيادة الوزن خصوصاً حول البطن',
+        'Sugar dependence is real and can feel like other addictions',
+        `${amount} times per day raises blood sugar and causes sudden crashes`,
+        'A never-ending craving cycle: sugar intake → crash → more cravings',
+        'Higher risk of diabetes and chronic inflammation',
+        'Weight gain, especially around the belly',
       ],
       weeklyPlans: buildReductionPlan(amount, 1, [
-        { replacement: 'تمر طبيعي (2-3 حبات)', tip: 'لما تحس بنهم للحلو - اعمل كوباية ماء الأول ثم تمر' },
-        { replacement: 'فاكهة طازجة (تفاح/كمثرى)', tip: 'الفاكهة فيها فيبر يبطئ امتصاص السكر - مش زي الحلوى' },
-        { replacement: 'شيكولاتة داكنة 70%+', tip: '2 مربعات شيكولاتة داكنة تكفي - بتقتل النهم' },
-        { replacement: 'سكر طبيعي صفر تقريباً', tip: 'الأسبوع ده: اقرأ كل لابل - السكر بيتخبأ في كل حاجة' },
+        { replacement: 'Natural dates (2-3 pieces)', tip: 'When cravings hit, drink a glass of water first and then eat dates' },
+        { replacement: 'Fresh fruit (apple/pear)', tip: 'Fruit contains fiber that slows sugar absorption - unlike candy' },
+        { replacement: 'Dark chocolate 70%+', tip: '2 squares of dark chocolate are enough - they help stop cravings' },
+        { replacement: 'Almost zero added sugar', tip: 'This week: read every label - sugar hides in everything' },
       ]),
       finalGoal: 1,
       alternatives: [
-        { name: 'تمر طبيعي', benefit: 'سكر طبيعي مع فيبر وبوتاسيوم - يهدي النهم', emoji: '🌴' },
-        { name: 'فاكهة طازجة موسمية', benefit: 'فيتامينات + فيبر + حلاوة طبيعية', emoji: '🍎' },
-        { name: 'شيكولاتة داكنة 70%', benefit: 'مضادات أكسدة + يقلل النهم للحلو', emoji: '🍫' },
-        { name: 'عسل طبيعي (كمية صغيرة)', benefit: 'أحسن من السكر الأبيض - في حدود', emoji: '🍯' },
+        { name: 'Natural dates', benefit: 'Natural sugar with fiber and potassium - helps calm cravings', emoji: '🌴' },
+        { name: 'Seasonal fresh fruit', benefit: 'Vitamins, fiber, and natural sweetness', emoji: '🍎' },
+        { name: 'Dark chocolate 70%', benefit: 'Antioxidants and less craving for sweets', emoji: '🍫' },
+        { name: 'Natural honey (small amount)', benefit: 'Better than white sugar when used in moderation', emoji: '🍯' },
       ],
     }),
 
@@ -266,24 +265,24 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
       currentAmount: amount,
       unit: 'cigarettes/day',
       healthRisks: [
-        'الإدمان الجسدي والنفسي أقوى من معظم المواد',
-        'كل سيجارة بتسرق 11 دقيقة من عمرك',
-        'نقص فيتامين C وE الشديد',
-        'تدمير تدريجي للرئة والقلب والأوعية',
-        'لازم استشارة طبيب لبرنامج إقلاع آمن',
+        'Physical and psychological dependence stronger than most substances',
+        'Every cigarette steals 11 minutes of your life',
+        'Severe deficiency in vitamin C and E',
+        'Progressive damage to the lungs, heart, and blood vessels',
+        'You should see a doctor for a safe quitting plan',
       ],
       weeklyPlans: buildReductionPlan(amount, 0, [
-        { replacement: 'نيكوتين بديل (استشر طبيب)', tip: 'قلل سيجارة كل يوم - مش فجأة' },
-        { replacement: 'جزر وخيار وشوكولاتة داكنة', tip: 'لما تحس بالشهوة - اعمل نشاط جسدي فوري' },
-        { replacement: 'تمارين تنفس عميق', tip: 'نوع النيكوتين البديل مع طبيب يساعد جداً' },
-        { replacement: 'دعم نفسي واجتماعي', tip: 'احسب المبلغ اللي وفرته - استخدمه مكافأة' },
+        { replacement: 'Nicotine replacement (doctor advised)', tip: 'Reduce by one cigarette each day - not all at once' },
+        { replacement: 'Carrot, cucumber, and dark chocolate', tip: 'When cravings hit, do a physical activity right away' },
+        { replacement: 'Deep breathing exercises', tip: 'A doctor-guided nicotine replacement plan can help a lot' },
+        { replacement: 'Psychological and social support', tip: 'Track the money you saved and use it as a reward' },
       ]),
       finalGoal: 0,
       alternatives: [
-        { name: 'جزر وخيار', benefit: 'يشغل الفم وبيديك إحساس المضغ', emoji: '🥕' },
-        { name: 'تمارين تنفس', benefit: 'تهدي الجهاز العصبي وتقلل الرغبة', emoji: '🧘' },
-        { name: 'فيتامين C يومي', benefit: 'التدخين بيدمر فيتامين C - تعويض ضروري', emoji: '🍊' },
-        { name: 'ماء بارد + نعناع', benefit: 'يقلل الرغبة الفورية في التدخين', emoji: '💧' },
+        { name: 'Carrot and cucumber', benefit: 'Keeps the mouth busy and gives a chewing feeling', emoji: '🥕' },
+        { name: 'Breathing exercises', benefit: 'Calms the nervous system and reduces cravings', emoji: '🧘' },
+        { name: 'Daily vitamin C', benefit: 'Smoking destroys vitamin C, so replacement is important', emoji: '🍊' },
+        { name: 'Cold water + mint', benefit: 'Helps reduce the immediate urge to smoke', emoji: '💧' },
       ],
     }),
 
@@ -293,23 +292,23 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
       currentAmount: amount,
       unit: 'times/week',
       healthRisks: [
-        'تلف الكبد والبنكرياس على المدى الطويل',
-        'تدمير امتصاص فيتامينات B وD والزنك',
-        'اضطراب النوم وزيادة القلق',
-        'كالوريز عالية جداً بدون قيمة غذائية',
+        'Long-term damage to the liver and pancreas',
+        'Reduced absorption of vitamins B and D and zinc',
+        'Sleep disruption and increased anxiety',
+        'Very high calories with no nutritional value',
       ],
       weeklyPlans: buildReductionPlan(amount, 0, [
-        { replacement: 'عصير رمان أو كركديه بارد', tip: 'استبدل في المناسبات بمشروب بديل جذاب' },
-        { replacement: 'ماء فوار بليمون ونعناع', tip: 'حدد المواقف اللي بتحفز العادة وتجنبها' },
-        { replacement: 'كومبوتشا (مخمر طبيعي)', tip: 'البدائل ذات الطعم القوي بتساعد' },
-        { replacement: 'دعم متخصص لو محتاج', tip: 'استشر متخصص لو حسيت صعوبة في التوقف' },
+        { replacement: 'Pomegranate juice or cold hibiscus tea', tip: 'Replace it in social situations with an appealing alternative drink' },
+        { replacement: 'Sparkling water with lemon and mint', tip: 'Identify the situations that trigger the habit and avoid them' },
+        { replacement: 'Kombucha (fermented drink)', tip: 'Bold-tasting alternatives can help a lot' },
+        { replacement: 'Professional support if needed', tip: 'Talk to a specialist if stopping feels difficult' },
       ]),
       finalGoal: 0,
       alternatives: [
-        { name: 'عصير رمان', benefit: 'أقوى مضاد أكسدة - يعوض تلف الكبد', emoji: '🍷' },
-        { name: 'كركديه بارد', benefit: 'مشروب اجتماعي جميل وصحي', emoji: '🌺' },
-        { name: 'ماء فوار ليمون', benefit: 'نفس إحساس الفوران بدون كحول', emoji: '💧' },
-        { name: 'شاي أعشاب بارد', benefit: 'يهدي الجهاز العصبي بدون إدمان', emoji: '🌿' },
+        { name: 'Pomegranate juice', benefit: 'A strong antioxidant drink that helps protect the liver', emoji: '🍷' },
+        { name: 'Cold hibiscus tea', benefit: 'A healthy and social-friendly drink', emoji: '🌺' },
+        { name: 'Sparkling lemon water', benefit: 'The same fizzy sensation without alcohol', emoji: '💧' },
+        { name: 'Cold herbal tea', benefit: 'Calms the nervous system without addiction', emoji: '🌿' },
       ],
     }),
   };
@@ -317,15 +316,21 @@ export function generateHabitPlan(habitName: string, dailyAmount: number): Habit
   const builder = plans[habitName];
   if (!builder) {
     return {
-      habitName, icon: '⚠️', currentAmount: dailyAmount, unit: 'times/day',
-      healthRisks: ['هذه العادة تؤثر على صحتك العامة'],
-      weeklyPlans: [], finalGoal: 0, alternatives: [],
+      habitName,
+      icon: '⚠️',
+      currentAmount: dailyAmount,
+      unit: 'times/day',
+      healthRisks: ['This habit affects your overall health'],
+      weeklyPlans: [],
+      finalGoal: 0,
+      alternatives: [],
     };
   }
+
   return builder(dailyAmount);
 }
 
-// ── helper: بناء الخطة التدريجية أسبوع بأسبوع ─────────────
+// ── Helper: build the progressive week-by-week plan ─────────
 function buildReductionPlan(
   start: number,
   goal: number,
@@ -333,16 +338,18 @@ function buildReductionPlan(
 ): WeeklyHabitPlan[] {
   const weeks = 4;
   const totalReduction = start - goal;
+
   return Array.from({ length: weeks }, (_, i) => {
     const week = i + 1;
     const reduction = Math.round((totalReduction / weeks) * week * 10) / 10;
     const target = Math.max(goal, Math.round((start - reduction) * 10) / 10);
+
     return {
       week,
       target,
       reduction: Math.round((start - target) * 10) / 10,
-      tips: [weekData[i]?.tip ?? 'استمر في خطتك - أنت رائع!'],
-      replacement: weekData[i]?.replacement ?? 'ماء طبيعي',
+      tips: [weekData[i]?.tip ?? 'Stay consistent - you are doing great!'],
+      replacement: weekData[i]?.replacement ?? 'Plain water',
     };
   });
 }

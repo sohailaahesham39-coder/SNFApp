@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MEALS } from '../../data/localData';
 import { loadProfile, UserProfile } from '../../data/userStore';
-import { useTheme, getColors } from '../../context/ThemeContext';
+import { useTheme, useThemeColors } from '../../context/ThemeContext';
 import { getMeals } from '../../lib/database';
 
 const FILTERS = ['All','Breakfast','Lunch','Dinner','Snack'];
@@ -13,7 +13,7 @@ const MEAL_COLORS: Record<string,string> = { Breakfast:'#E8FF4D', Lunch:'#4DFF9E
 
 export default function Meals() {
   const { isDark } = useTheme();
-  const C = getColors(isDark);
+  const C = useThemeColors();
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [profile, setProfile] = useState<UserProfile|null>(null);
@@ -44,7 +44,7 @@ export default function Meals() {
 
   return (
     <SafeAreaView style={[s.container,{backgroundColor:C.bg}]} edges={['top']}>
-      <LinearGradient colors={isDark?['#050505','#080f06']:['#F0F4F0','#FFFFFF']} style={StyleSheet.absoluteFill}/>
+      <LinearGradient colors={[C.gradStart, C.gradEnd]} style={StyleSheet.absoluteFill}/>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[s.title,{color:C.text}]}>Meal Plans 🥗</Text>
         <Text style={[s.sub,{color:C.textMuted}]}>Egyptian-inspired, nutrition-optimized</Text>

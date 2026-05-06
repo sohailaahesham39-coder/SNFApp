@@ -12,6 +12,11 @@ export interface UserProfile {
   conditions: string[];
   allergens: string[];
   habits?: string[];
+  healthConditions?: string[];
+  healthSymptoms?: string[];
+  healthEpisodes?: string[];
+  healthDrinks?: string[];
+  healthHabits?: string[];
   bmi: number;
   bmr: number;
   tdee: number;
@@ -25,8 +30,14 @@ export async function saveProfile(profile: UserProfile): Promise<void> {
 }
 
 export async function loadProfile(): Promise<UserProfile | null> {
-  const data = await AsyncStorage.getItem(KEY);
-  return data ? JSON.parse(data) : null;
+  try {
+    const data = await AsyncStorage.getItem(KEY);
+    if (!data) return null;
+    return JSON.parse(data) as UserProfile;
+  } catch {
+    await AsyncStorage.removeItem(KEY);
+    return null;
+  }
 }
 
 export async function clearProfile(): Promise<void> {

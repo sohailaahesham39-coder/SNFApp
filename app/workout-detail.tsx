@@ -3,12 +3,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WORKOUTS } from '../data/localData';
-import { useTheme, getColors } from '../context/ThemeContext';
+import { useTheme, useThemeColors } from '../context/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function WorkoutDetail() {
   const { isDark } = useTheme();
-  const C = getColors(isDark);
+  const C = useThemeColors();
   const { id } = useLocalSearchParams();
   const workout = WORKOUTS.find(w => w.id === id);
   const [timerActive, setTimerActive] = useState(false);
@@ -45,7 +45,7 @@ export default function WorkoutDetail() {
 
   return (
     <View style={[s.container, { backgroundColor: C.bg }]}>
-      <LinearGradient colors={isDark ? ['#050505','#080f06'] : ['#F0F4F0','#FFFFFF']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[C.gradStart, C.gradEnd]} style={StyleSheet.absoluteFill} />
       <SafeAreaView edges={['top']}>
         <TouchableOpacity style={s.back} onPress={() => router.back()}>
           <Text style={s.backT}>← Back</Text>

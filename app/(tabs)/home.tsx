@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { loadProfile, UserProfile, getBMICategory } from '../../data/userStore';
+import { tryLogDailyProgressFromHome } from '../../lib/progressLog';
 import { MEALS, WORKOUTS } from '../../data/localData';
-import { useTheme, getColors } from '../../context/ThemeContext';
+import { useThemeColors } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -140,15 +141,18 @@ function getConditionTips(conditions: string[]): string[] {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const { isDark } = useTheme();
-  const C = getColors(isDark);
+  const C = useThemeColors();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
     const p = await loadProfile();
-    if (!p) router.replace('/(auth)/welcome');
-    else setProfile(p);
+    if (!p) {
+      router.replace('/(auth)/welcome');
+      return;
+    }
+    setProfile(p);
+    void tryLogDailyProgressFromHome(p);
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -181,13 +185,13 @@ export default function Home() {
   return (
     <SafeAreaView style={[s.container, { backgroundColor: C.bg }]} edges={['top']}>
       <LinearGradient
-        colors={isDark ? ['#050505', '#080f06'] : ['#F0F4F0', '#FFFFFF']}
+        colors={[C.gradStart, C.gradEnd]}
         style={StyleSheet.absoluteFill}
       />
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E8FF4D" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
       >
         {/* ── Header ── */}
         <View style={s.header}>
