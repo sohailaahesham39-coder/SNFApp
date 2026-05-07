@@ -7,6 +7,7 @@ A React Native + Expo application for personalized nutrition, workout guidance, 
 This project is a **mobile-first smart nutrition and fitness app** built as a **local-first Expo application**.
 
 ### Frontend / Mobile App
+
 What already exists in the codebase:
 
 - Splash screen
@@ -22,6 +23,7 @@ What already exists in the codebase:
 - Habit planning and symptom analysis
 
 ### Backend / Server Layer
+
 What is **not implemented yet** in the current repository, but is required for the full product:
 
 - Auth system with JWT
@@ -65,6 +67,7 @@ The app is designed to evolve into a full platform with backend APIs, auth, data
 ## Implemented Screens
 
 ### 1) Splash Screen
+
 File: `app/index.tsx`
 
 - Animated branded splash page
@@ -74,6 +77,7 @@ File: `app/index.tsx`
   - `/(auth)/welcome` if not
 
 ### 2) Main App Navigation
+
 File: `app/(tabs)/_layout.tsx`
 
 Tabs included:
@@ -85,6 +89,7 @@ Tabs included:
 - Profile
 
 ### 3) Home Screen
+
 File: `app/(tabs)/home.tsx`
 
 Features:
@@ -103,6 +108,7 @@ Features:
 - Quick access shortcuts
 
 ### 4) Profile Screen
+
 File: `app/(tabs)/profile.tsx`
 
 Features:
@@ -121,6 +127,7 @@ Features:
 - Logout with profile clearing
 
 ### 5) Workout Screen
+
 File: `app/(tabs)/workout.tsx`
 
 Features:
@@ -141,6 +148,7 @@ Features:
 ## Local Data & Logic Modules
 
 ### `data/userStore.ts`
+
 Handles:
 
 - Saving profile to AsyncStorage
@@ -153,6 +161,7 @@ Handles:
 - BMI category classification
 
 ### `data/localData.ts`
+
 Contains local datasets:
 
 - Meals
@@ -162,6 +171,7 @@ Contains local datasets:
 - Chatbot responses
 
 ### `data/medicalEngine.ts`
+
 Contains:
 
 - Extended medical condition database
@@ -171,6 +181,7 @@ Contains:
 - Feedback questions
 
 ### `data/mlEngine.ts`
+
 Contains local ML-style logic:
 
 - KNN-based meal recommendation
@@ -179,9 +190,11 @@ Contains local ML-style logic:
 - Combined summary runner for UI
 
 ### `data/habitPlan.ts`
+
 Provides habit-based planning logic for lifestyle and health improvement.
 
 ### `context/ThemeContext.tsx`
+
 Provides:
 
 - Dark/light theme state
@@ -271,27 +284,31 @@ That means the current codebase is best treated as a **mobile prototype / client
 This section is a short script students can use to explain the project clearly during a review.
 
 ### 1) How the app flow works
+
 - The app starts on a splash/loading path.
 - It checks whether a profile/session exists.
 - If profile data exists, it opens Home.
 - If not, it opens the Auth/Welcome flow.
 
 ### 2) What the frontend includes
-- **`app/index.tsx`**: initial entry and route handoff.
-- **`app/(tabs)/_layout.tsx`**: main tab navigation (Home, Meals, Workout, Chat, Profile).
-- **`app/(tabs)/home.tsx`**: greeting, calorie target, BMI/BMR/TDEE, meal/workout recommendations, health tips.
-- **`app/(tabs)/profile.tsx`**: user profile, analysis views, habit plans, symptom section, theme settings.
-- **`app/(tabs)/workout.tsx`**: workout list and filtering by difficulty and goal.
+
+- `**app/index.tsx`**: initial entry and route handoff.
+- `**app/(tabs)/_layout.tsx**`: main tab navigation (Home, Meals, Workout, Chat, Profile).
+- `**app/(tabs)/home.tsx**`: greeting, calorie target, BMI/BMR/TDEE, meal/workout recommendations, health tips.
+- `**app/(tabs)/profile.tsx**`: user profile, analysis views, habit plans, symptom section, theme settings.
+- `**app/(tabs)/workout.tsx**`: workout list and filtering by difficulty and goal.
 
 ### 3) Core logic files
-- **`data/userStore.ts`**: profile save/load/clear and BMI/BMR/TDEE/target calorie calculations.
-- **`data/localData.ts`**: base meals, workouts, health conditions, allergens, chatbot responses.
-- **`data/medicalEngine.ts`**: medical insights, condition/lab mapping, safe plans.
-- **`data/mlEngine.ts`**: local recommendation and prediction logic.
-- **`data/habitPlan.ts`**: habit reduction planning.
-- **`context/ThemeContext.tsx`**: dark/light mode, theme persistence, and colors.
+
+- `**data/userStore.ts**`: profile save/load/clear and BMI/BMR/TDEE/target calorie calculations.
+- `**data/localData.ts**`: base meals, workouts, health conditions, allergens, chatbot responses.
+- `**data/medicalEngine.ts**`: medical insights, condition/lab mapping, safe plans.
+- `**data/mlEngine.ts**`: local recommendation and prediction logic.
+- `**data/habitPlan.ts**`: habit reduction planning.
+- `**context/ThemeContext.tsx**`: dark/light mode, theme persistence, and colors.
 
 ### 4) What the app currently does
+
 - Stores and reads user data locally (with Supabase-first integration in key flows).
 - Calculates calorie needs and fitness metrics.
 - Recommends meals and workouts.
@@ -299,6 +316,7 @@ This section is a short script students can use to explain the project clearly d
 - Includes AI chat and progress tracking foundations.
 
 ### 5) What is required for full production maturity
+
 - Complete backend automation for push events and scheduled jobs.
 - Final native mobile messaging configuration per platform.
 - Full API/event layer for all notification scenarios.

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile } from '../data/userStore';
@@ -57,14 +58,18 @@ function Inner() {
         const settings = await loadNotificationSettings();
         await applyLocalNotificationSchedules(settings);
       }
-      await setupPushNotifications((payload) => {
-        const target = payload.target;
-        if (typeof target === 'string' && target.startsWith('/')) {
-          router.push(target as never);
-        } else {
-          router.push('/(tabs)/home');
-        }
-      });
+      // Expo Go does not support remote push notifications.
+      // Keep local reminders enabled, and skip push setup here.
+      if (Constants.appOwnership !== 'expo') {
+        await setupPushNotifications((payload) => {
+          const target = payload.target;
+          if (typeof target === 'string' && target.startsWith('/')) {
+            router.push(target as never);
+          } else {
+            router.push('/(tabs)/home');
+          }
+        });
+      }
     };
     init().catch(() => {});
     return () => {
