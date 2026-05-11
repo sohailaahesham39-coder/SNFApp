@@ -1,17 +1,20 @@
 /**
  * Upserts bundled MEALS / WORKOUTS into Supabase (requires service role).
- * Loads .env from repo root like seed-medical-data.ts.
+ * Loads .env from the repo root (or next to this script). See env.example.
  */
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { MEALS, WORKOUTS } from '../data/localData';
 
-function loadDotEnvIfNeeded(): void {
-  const envPath = path.resolve(process.cwd(), '.env');
-  if (!fs.existsSync(envPath)) return;
-  const text = fs.readFileSync(envPath, 'utf8');
-  for (const rawLine of text.split(/\r?\n/)) {
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, '..');
+
+function applyEnvLines(text: string): void {
+  let body = text;
+  if (body.charCodeAt(0) === 0xfeff) body = body.slice(1);
+  for (const rawLine of body.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
     const eq = line.indexOf('=');
@@ -28,6 +31,23 @@ function loadDotEnvIfNeeded(): void {
     if (process.env[key] === undefined || String(process.env[key]).trim() === '') {
       process.env[key] = value;
     }
+  }
+}
+
+function loadDotEnvIfNeeded(): void {
+  const candidates = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '.env.local'),
+    path.join(repoRoot, '.env'),
+    path.join(repoRoot, '.env.local'),
+  ];
+  const seen = new Set<string>();
+  for (const envPath of candidates) {
+    const norm = path.normalize(envPath);
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    if (!fs.existsSync(envPath)) continue;
+    applyEnvLines(fs.readFileSync(envPath, 'utf8'));
   }
 }
 
@@ -84,13 +104,18 @@ async function upsertChunks<T extends Record<string, unknown>>(
     process.env.SUPABASE_URL?.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!supabaseUrl || !serviceRoleKey) {
+  const missing: string[] = [];
+  if (!supabaseUrl) missing.push('EXPO_PUBLIC_SUPABASE_URL (or SUPABASE_URL)');
+  if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (missing.length) {
     throw new Error(
-      'Missing project URL (EXPO_PUBLIC_SUPABASE_URL or SUPABASE_URL) or SUPABASE_SERVICE_ROLE_KEY in .env. ' +
-        'Alternatively run the catalog block from scripts/MASTER-supabase-setup.sql in the Supabase SQL Editor.'
+      `Missing in .env (required for catalog upsert): ${missing.join(', ')}.\n` +
+        'Add the service role key from Supabase → Project Settings → API → service_role (secret). ' +
+        'The anon key (EXPO_PUBLIC_SUPABASE_ANON_KEY) cannot replace it.\n' +
+        'Or paste the catalog section from scripts/MASTER-supabase-setup.sql into the Supabase SQL Editor.'
     );
   }
-  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const admin = createClient(supabaseUrl as string, serviceRoleKey as string);
   let n = 0;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
