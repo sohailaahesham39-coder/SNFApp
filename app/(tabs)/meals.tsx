@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,7 @@ import { UserProfile } from '../../data/userStore';
 import { useTheme, useThemeColors } from '../../context/ThemeContext';
 import { getMeals } from '../../lib/database';
 import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
+import { buildMedicalMealTimingHints, estimateMacroGap, generatePersonalizedMealPlan, runMealSafetyCheck, swapMealInPlan, type DailyMealPlan, type PlannedMealType } from '../../lib/mealPlanner';
 
 const FILTERS = ['All','Breakfast','Lunch','Dinner','Snack'];
 const MEAL_COLORS: Record<string,string> = { Breakfast:'#E8FF4D', Lunch:'#4DFF9E', Dinner:'#9D8FFF', Snack:'#FF9D4D' };
@@ -20,9 +21,18 @@ export default function Meals() {
   const [profile, setProfile] = useState<UserProfile|null>(null);
   const [meals, setMeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [plan, setPlan] = useState<DailyMealPlan | null>(null);
+  const [timingHints, setTimingHints] = useState<string[]>([]);
 
   useEffect(() => {
-    loadProfileSupabaseFirst().then(setProfile);
+    loadProfileSupabaseFirst().then(async (p) => {
+      setProfile(p);
+      if (p) {
+        const generated = await generatePersonalizedMealPlan(p).catch(() => null);
+        setPlan(generated);
+        setTimingHints(buildMedicalMealTimingHints(p, []));
+      }
+    });
     getMeals().then(data => {
       if (data && data.length > 0) {
         setMeals(data);
@@ -40,8 +50,32 @@ export default function Meals() {
     const mf = filter==='All' || m.meal_type===filter;
     const ms = m.name.toLowerCase().includes(search.toLowerCase()) || m.foods.toLowerCase().includes(search.toLowerCase());
     const ma = !profile?.allergens?.length || profile.allergens.every(a => !m.foods.toLowerCase().includes(a.toLowerCase()));
-    return mf && ms && ma;
+    const safety = profile ? runMealSafetyCheck(m, profile, []) : { passed: true };
+    return mf && ms && ma && safety.passed;
   });
+
+  const planMeals = plan
+    ? (Object.entries(plan.meals) as Array<[PlannedMealType, any]>).filter(([, meal]) => !!meal)
+    : [];
+
+  const macroGap = profile && plan ? estimateMacroGap(plan, profile) : null;
+
+  async function handleSwap(mealType: PlannedMealType) {
+    if (!plan) return;
+    const next = await swapMealInPlan(plan, mealType);
+    setPlan(next);
+  }
+
+  function openShoppingList() {
+    if (!plan || plan.shoppingList.length === 0) {
+      Alert.alert('Shopping list', 'No items in today shopping list yet.');
+      return;
+    }
+    Alert.alert(
+      'Shopping list',
+      plan.shoppingList.map((row) => `• ${row.item} x${row.qty}`).join('\n')
+    );
+  }
 
   return (
     <SafeAreaView style={[s.container,{backgroundColor:C.bg}]} edges={['top']}>
@@ -49,6 +83,25 @@ export default function Meals() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[s.title,{color:C.text}]}>Meal Plans 🥗</Text>
         <Text style={[s.sub,{color:C.textMuted}]}>Egyptian-inspired, nutrition-optimized</Text>
+        {plan && (
+          <View style={[s.planCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={[s.planTitle, { color: C.text }]}>Today Personalized Plan</Text>
+            <Text style={[s.planSub, { color: C.textMuted }]}>
+              {Math.round(plan.totals.calories)} kcal • {Math.round(plan.totals.protein)}g protein • {Math.round(plan.totals.carbs)}g carbs • {Math.round(plan.totals.fat)}g fat
+            </Text>
+            {macroGap && (
+              <Text style={[s.planSub, { color: C.textMuted }]}>
+                Gap vs target: {Math.round(macroGap.calories)} kcal, P {Math.round(macroGap.protein)}g, C {Math.round(macroGap.carbs)}g, F {Math.round(macroGap.fat)}g
+              </Text>
+            )}
+            {timingHints.map((h) => (
+              <Text key={h} style={[s.hint, { color: C.textMuted }]}>• {h}</Text>
+            ))}
+            <TouchableOpacity style={[s.shoppingBtn, { borderColor: C.accent + '55' }]} onPress={openShoppingList}>
+              <Text style={[s.shoppingBtnT, { color: C.accent }]}>Open shopping list</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={[s.searchBox,{backgroundColor:C.bg3,borderColor:C.border}]}>
           <Text style={s.searchIcon}>🔍</Text>
@@ -64,6 +117,28 @@ export default function Meals() {
         </ScrollView>
 
         <Text style={[s.count,{color:C.textDim}]}>{filtered.length} meals found</Text>
+
+        {planMeals.length > 0 && (
+          <View style={[s.planCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={[s.planTitle, { color: C.text }]}>Safe for you today</Text>
+            {planMeals.map(([mealType, meal]) => (
+              <View key={meal.id} style={[s.safeRow, { borderBottomColor: C.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.safeTitle, { color: C.text }]}>{mealType}: {meal.name}</Text>
+                  <Text style={[s.safeSub, { color: C.textMuted }]}>
+                    ✅ Safety checked • {meal.safetyReasons?.[0] ?? 'Profile-safe'}
+                  </Text>
+                  {meal.medicationNotes?.map((n: string) => (
+                    <Text key={n} style={[s.safeSub, { color: C.warning }]}>⚠ {n}</Text>
+                  ))}
+                </View>
+                <TouchableOpacity style={[s.swapBtn, { borderColor: C.border }]} onPress={() => handleSwap(mealType)}>
+                  <Text style={[s.swapBtnT, { color: C.text }]}>Swap</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
 
         {filtered.map(meal=>{
           const color = MEAL_COLORS[meal.meal_type]||'#E8FF4D';
@@ -112,6 +187,17 @@ const s = StyleSheet.create({
   pillT:{fontSize:12,fontWeight:'600'},
   count:{fontSize:11,marginBottom:12},
   card:{borderWidth:1,borderRadius:20,padding:16,marginBottom:12},
+  planCard:{borderWidth:1,borderRadius:16,padding:14,marginBottom:12},
+  planTitle:{fontSize:15,fontWeight:'800',marginBottom:6},
+  planSub:{fontSize:12,marginBottom:4},
+  hint:{fontSize:12,marginTop:2},
+  shoppingBtn:{marginTop:8,borderWidth:1,borderRadius:12,paddingVertical:10,alignItems:'center'},
+  shoppingBtnT:{fontSize:13,fontWeight:'700'},
+  safeRow:{flexDirection:'row',alignItems:'center',gap:8,paddingVertical:10,borderBottomWidth:1},
+  safeTitle:{fontSize:13,fontWeight:'700'},
+  safeSub:{fontSize:11,marginTop:2},
+  swapBtn:{borderWidth:1,borderRadius:10,paddingHorizontal:10,paddingVertical:8},
+  swapBtnT:{fontSize:12,fontWeight:'700'},
   cardHead:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginBottom:12},
   typePill:{paddingHorizontal:10,paddingVertical:4,borderRadius:999},
   typeT:{fontSize:11,fontWeight:'700'},

@@ -1,9 +1,11 @@
-import * as Linking from 'expo-linking';
 import { supabase } from './supabase';
+import * as Linking from 'expo-linking';
 
 /** Must match Redirect URLs entries in Supabase Dashboard (scheme from app.json). */
 export function getOAuthRedirectUri(): string {
-  return Linking.createURL('auth/callback');
+  // Use a stable deep link to avoid localhost/browser fallback redirects.
+  // This must exist in Supabase Auth Redirect URLs and Google OAuth redirect setup.
+  return 'smartnutrition://auth/callback';
 }
 
 export async function signInWithOAuthProvider(provider: 'google' | 'apple'): Promise<{ error: Error | null }> {

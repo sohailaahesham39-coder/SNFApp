@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { UserProfile } from '../../data/userStore';
 import { useThemeColors } from '../../context/ThemeContext';
 import { loadProfileSupabaseFirst } from '../../lib/supabaseUserData';
@@ -48,12 +49,19 @@ function bmiLabel(bmi?: number) {
   return 'Obese';
 }
 
+function fmtProfileNumber(value: unknown, suffix = '') {
+  if (typeof value === 'number' && Number.isFinite(value)) return `${value}${suffix}`;
+  return `—${suffix}`;
+}
+
 function buildWelcomeMessage(profile: UserProfile | null) {
   if (!profile) {
     return "Hi! I'm your Smart Nutrition AI Coach 🤖\n\nAsk me about meals, workouts, hydration, habits, or symptoms, and I'll keep the answers practical and short.";
   }
 
-  return `Hi ${profile.name} 👋
+  const who = profile.name?.trim() || 'there';
+
+  return `Hi ${who} 👋
 
 I already know your profile, so we can keep this personal from the start. Ask me anything about meals, workouts, habits, or symptoms, and I'll answer based on your goal, conditions, and preferences.`;
 }
@@ -63,22 +71,24 @@ function buildProfilePrompt(profile: UserProfile | null) {
     return `You are a Smart Nutrition & Fitness AI Coach. Speak naturally, be concise, and give useful nutrition and fitness advice. Use emojis lightly.`;
   }
 
+  const nm = profile.name?.trim() || 'User';
+
   return `You are a Smart Nutrition & Fitness AI Coach with long-term memory of the user's profile.
 
 Speak naturally and do not sound robotic. Use the profile as background knowledge, but do not repeat the full profile fields in every reply. Mention the user's name only when it feels natural. Keep responses under 150 words unless the user asks for more detail.
 
 USER PROFILE:
-- Name: ${profile.name}
-- Age: ${profile.age} years old
-- Gender: ${profile.gender}
-- Height: ${profile.height} cm
-- Weight: ${profile.weight} kg
-- BMI: ${profile.bmi} (${bmiLabel(profile.bmi)})
-- Goal: ${profile.goal}
-- Activity Level: ${profile.activity}
-- Daily Calorie Target: ${profile.targetCalories} kcal
-- BMR: ${profile.bmr} kcal
-- TDEE: ${profile.tdee} kcal
+- Name: ${nm}
+- Age: ${fmtProfileNumber(profile.age)} years old
+- Gender: ${profile.gender ?? '—'}
+- Height: ${fmtProfileNumber(profile.height, ' cm')}
+- Weight: ${fmtProfileNumber(profile.weight, ' kg')}
+- BMI: ${fmtProfileNumber(profile.bmi)} (${bmiLabel(profile.bmi)})
+- Goal: ${profile.goal ?? '—'}
+- Activity Level: ${profile.activity ?? '—'}
+- Daily Calorie Target: ${fmtProfileNumber(profile.targetCalories, ' kcal')}
+- BMR: ${fmtProfileNumber(profile.bmr, ' kcal')}
+- TDEE: ${fmtProfileNumber(profile.tdee, ' kcal')}
 - Health Conditions: ${profile.conditions?.length ? profile.conditions.join(', ') : 'None'}
 - Food Allergies: ${profile.allergens?.length ? profile.allergens.join(', ') : 'None'}
 - Daily Habits: ${profile.habits?.length ? profile.habits.join(', ') : 'None'}
@@ -368,8 +378,20 @@ export default function Chat() {
     ]);
   }
 
+  if (!hydrated) {
+    return (
+      <SafeAreaView style={[s.container, { backgroundColor: C.bg }]} edges={['top']}>
+        <LinearGradient colors={[C.gradStart, C.gradEnd]} style={StyleSheet.absoluteFill} />
+        <View style={s.loadingWrap}>
+          <Text style={[s.loadingTitle, { color: C.text }]}>Loading chat...</Text>
+          <Text style={[s.loadingSub, { color: C.textMuted }]}>Preparing your profile-aware assistant</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <View style={[s.container, { backgroundColor: C.bg }]}>
+    <SafeAreaView style={[s.container, { backgroundColor: C.bg }]} edges={['top']}>
       <LinearGradient colors={[C.gradStart, C.gradEnd]} style={StyleSheet.absoluteFill} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={[s.header, { borderBottomColor: C.border }]}>
@@ -388,7 +410,7 @@ export default function Chat() {
           </TouchableOpacity>
           {profile && (
             <View style={s.profileBadge}>
-              <Text style={s.profileBadgeT}>{profile.name[0].toUpperCase()}</Text>
+              <Text style={s.profileBadgeT}>{(profile.name?.[0] ?? 'U').toUpperCase()}</Text>
             </View>
           )}
         </View>
@@ -420,7 +442,7 @@ export default function Chat() {
                   msg.role === 'user' ? s.userBubble : [s.botBubble, { backgroundColor: C.card, borderColor: C.border }],
                 ]}
               >
-                <Text style={[s.bubbleT, msg.role === 'user' && s.userT]}>{msg.text}</Text>
+                <Text style={[s.bubbleT, { color: msg.role === 'user' ? '#000' : C.text }, msg.role === 'user' && s.userT]}>{msg.text}</Text>
                 <Text style={[s.timeT, { color: msg.role === 'user' ? 'rgba(0,0,0,0.4)' : C.textDim }]}>
                   {msg.time}
                 </Text>
@@ -433,7 +455,7 @@ export default function Chat() {
                 <Text style={{ fontSize: 12 }}>🤖</Text>
               </View>
               <View style={[s.botBubble, { backgroundColor: C.card, borderColor: C.border }]}>
-                <Text style={{ color: '#E8FF4D', fontSize: 14, letterSpacing: 4 }}>● ● ●</Text>
+                <Text style={{ color: C.accent, fontSize: 14, letterSpacing: 4 }}>● ● ●</Text>
               </View>
             </View>
           )}
@@ -443,10 +465,10 @@ export default function Chat() {
           {SUGGESTIONS.map(sg => (
             <TouchableOpacity
               key={sg}
-              style={[s.chip, { borderColor: 'rgba(232,255,77,0.15)', backgroundColor: 'rgba(232,255,77,0.06)' }]}
+              style={[s.chip, { borderColor: C.accent + '55', backgroundColor: C.accent + '18' }]}
               onPress={() => send(sg)}
             >
-              <Text style={[s.chipT, { color: '#E8FF4D' }]}>{sg}</Text>
+              <Text style={[s.chipT, { color: C.accent }]}>{sg}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -469,13 +491,16 @@ export default function Chat() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, paddingTop: 60, borderBottomWidth: 1 },
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  loadingTitle: { fontSize: 18, fontWeight: '800' },
+  loadingSub: { fontSize: 13 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, borderBottomWidth: 1 },
   aiAvatar: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   aiEmoji: { fontSize: 22 },
   aiName: { fontSize: 15, fontWeight: '700', marginBottom: 2 },
@@ -496,7 +521,7 @@ const s = StyleSheet.create({
   bubble: { maxWidth: '78%', padding: 10, borderRadius: 16 },
   botBubble: { borderWidth: 1, borderBottomLeftRadius: 4 },
   userBubble: { backgroundColor: '#E8FF4D', borderBottomRightRadius: 4 },
-  bubbleT: { fontSize: 13, color: '#ccc', lineHeight: 19 },
+  bubbleT: { fontSize: 13, lineHeight: 19 },
   userT: { color: '#000', fontWeight: '600' },
   timeT: { fontSize: 10, marginTop: 4 },
   suggestions: { paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 1, maxHeight: 50 },

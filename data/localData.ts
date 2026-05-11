@@ -1,3 +1,5 @@
+import { EXTRA_MEALS, EXTRA_WORKOUTS } from './catalogExpansion';
+
 export const MEALS = [
   { id: 'MEAL001', name: 'Egyptian Healthy Breakfast', meal_type: 'Breakfast', calories: 380, protein: 22, carbs: 45, fat: 12, fiber: 6, emoji: '🫘', foods: 'Foul + boiled eggs + brown bread + salad', difficulty: 'Easy', prep_time: 15, conditions_suitable: ['Diabetes', 'Heart', 'Obesity'], conditions_avoid: ['Blood pressure (no salt)'], weight_loss_score: 8, muscle_gain_score: 7, heart_health_score: 9, diabetes_score: 8, is_vegetarian: false, is_gluten_free: true },
   { id: 'MEAL002', name: 'Light Breakfast', meal_type: 'Breakfast', calories: 250, protein: 15, carbs: 30, fat: 8, fiber: 5, emoji: '🥣', foods: 'Greek yogurt + oats + fruits', difficulty: 'Easy', prep_time: 10, conditions_suitable: ['Diabetes', 'Obesity', 'Colon'], conditions_avoid: ['Lactose intolerance'], weight_loss_score: 9, muscle_gain_score: 5, heart_health_score: 8, diabetes_score: 9, is_vegetarian: true, is_gluten_free: true },
@@ -10,6 +12,7 @@ export const MEALS = [
   { id: 'MEAL010', name: 'Protein Snack Box', meal_type: 'Snack', calories: 180, protein: 15, carbs: 12, fat: 8, fiber: 3, emoji: '🥜', foods: 'Hard boiled eggs + almonds + cucumber slices', difficulty: 'Easy', prep_time: 5, conditions_suitable: ['Diabetes', 'Obesity', 'Heart', 'Muscle Gain'], conditions_avoid: ['Nut allergy'], weight_loss_score: 8, muscle_gain_score: 8, heart_health_score: 8, diabetes_score: 9, is_vegetarian: true, is_gluten_free: true },
   { id: 'MEAL011', name: 'Tuna Salad', meal_type: 'Lunch', calories: 290, protein: 28, carbs: 15, fat: 12, fiber: 4, emoji: '🥗', foods: 'Tuna + lettuce + tomato + cucumber + olive oil + lemon', difficulty: 'Easy', prep_time: 10, conditions_suitable: ['Diabetes', 'Heart', 'Obesity'], conditions_avoid: ['Fish allergy'], weight_loss_score: 9, muscle_gain_score: 8, heart_health_score: 9, diabetes_score: 9, is_vegetarian: false, is_gluten_free: true },
   { id: 'MEAL012', name: 'Oatmeal + Fruits', meal_type: 'Breakfast', calories: 280, protein: 10, carbs: 48, fat: 6, fiber: 8, emoji: '🥣', foods: 'Oatmeal + banana + berries + honey + skim milk', difficulty: 'Easy', prep_time: 10, conditions_suitable: ['Diabetes', 'Heart', 'Colon', 'Obesity'], conditions_avoid: ['Gluten intolerance'], weight_loss_score: 8, muscle_gain_score: 6, heart_health_score: 9, diabetes_score: 7, is_vegetarian: true, is_gluten_free: false },
+  ...EXTRA_MEALS,
 ];
 
 export const WORKOUTS = [
@@ -23,6 +26,7 @@ export const WORKOUTS = [
   { id: 'WRK008', name: 'Yoga Flow', muscle_group: 'Full Body', difficulty: 'Beginner', equipment: 'Mat', calories_burned: 150, duration: '40 min', sets: 1, reps: '40 min', emoji: '🧘', goal: ['Maintain', 'Flexibility'], instructions: 'Follow sun salutation sequence. Hold each pose 5 breaths. Focus on breathing and alignment. Great for stress relief.', rest_seconds: 0 },
   { id: 'WRK009', name: 'Jump Rope', muscle_group: 'Full Body', difficulty: 'Beginner', equipment: 'Jump Rope', calories_burned: 350, duration: '20 min', sets: 3, reps: '3 min', emoji: '🪢', goal: ['Weight Loss', 'Cardio'], instructions: 'Keep elbows close to body. Jump just high enough for rope to pass. Land softly on balls of feet. Start slow and build speed.', rest_seconds: 60 },
   { id: 'WRK010', name: 'Pull-ups', muscle_group: 'Back', difficulty: 'Intermediate', equipment: 'Pull-up Bar', calories_burned: 180, duration: '15 min', sets: 4, reps: '6-10', emoji: '💪', goal: ['Muscle Gain', 'Strength'], instructions: 'Grip bar slightly wider than shoulders. Pull chest to bar, keeping core tight. Lower slowly with control. Full range of motion.', rest_seconds: 90 },
+  ...EXTRA_WORKOUTS,
 ];
 
 export const HEALTH_CONDITIONS = [

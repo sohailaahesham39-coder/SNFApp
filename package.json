@@ -8,6 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "seed:medical": "tsx scripts/seed-medical-data.ts",
+    "seed:catalog": "tsx scripts/seed-local-catalog.ts",
+    "emit:catalog-sql": "tsx scripts/emit-local-catalog-sql.ts",
     "verify:data": "tsx scripts/verify-data-integrity.ts"
   },
   "dependencies": {

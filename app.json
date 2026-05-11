@@ -2,11 +2,11 @@
   "expo": {
     "name": "Smart Nutrition",
     "slug": "smart-nutrition",
+    "owner": "solyso",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "smartnutrition",
-    "newArchEnabled": false,
     "splash": {
       "backgroundColor": "#080808"
     },

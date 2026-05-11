@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,11 +8,23 @@ import { UserProfile } from '../../data/userStore';
 import { useTheme, useThemeColors } from '../../context/ThemeContext';
 import { getWorkouts } from '../../lib/database';
 import { loadProfileSupabaseFirst, loadWorkoutWeekSupabaseFirst, saveWorkoutWeekSupabaseFirst } from '../../lib/supabaseUserData';
+import { supabase } from '../../lib/supabase';
+import { healthDataEvents } from '../../lib/healthIntegration';
+import { mergeChecklistPatch } from '../../lib/dailyChecklist';
+import { getTodayDailyLog, upsertTodayDailyLog } from '../../lib/dailyLogs';
+import { unifiedMedicalConditions } from '../../lib/healthProfileCoherence';
+import { sortWorkoutsForProfile, workoutConditionSummary } from '../../lib/workoutRecommendations';
 
 const DIFFS = ['All','Beginner','Intermediate'];
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function defaultWeek(): boolean[] {
   return [false, false, false, false, false, false, false];
+}
+
+/** Maps JS weekday to Mon=0 … Sun=6 (matches `DAYS`). */
+function weekDotIndexFromMonday(): number {
+  const d = new Date().getDay();
+  return d === 0 ? 6 : d - 1;
 }
 
 export default function Workout() {
@@ -43,16 +55,48 @@ export default function Workout() {
     const next = weekDone.map((v, i) => (i === index ? !v : v));
     setWeekDone(next);
     await saveWorkoutWeekSupabaseFirst(next);
+    if (index === weekDotIndexFromMonday()) {
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
+      if (userId) {
+        const todayLog = await getTodayDailyLog(userId).catch(() => null);
+        const meals = mergeChecklistPatch(todayLog?.meals, { workout: next[index] });
+        await upsertTodayDailyLog(userId, { meals }).catch(() => {});
+      }
+    }
+    if (next[index]) {
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
+      if (userId) {
+        await healthDataEvents.onWorkoutCompleted(userId, {
+          calories_burned: 200,
+          pain_experienced: false,
+          perceived_exertion: 6,
+        } as any);
+      }
+    }
   }
 
-  const filtered = workouts.filter(w => diff==='All' || w.difficulty===diff);
+  const orderedWorkouts = useMemo(
+    () => sortWorkoutsForProfile(profile, workouts),
+    [profile, workouts]
+  );
+
+  const filtered = orderedWorkouts.filter((w: any) => diff === 'All' || w.difficulty === diff);
+  const condHint = workoutConditionSummary(profile ? unifiedMedicalConditions(profile) : undefined);
 
   return (
     <SafeAreaView style={[s.container,{backgroundColor:C.bg}]} edges={['top']}>
       <LinearGradient colors={[C.gradStart, C.gradEnd]} style={StyleSheet.absoluteFill}/>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[s.title,{color:C.text}]}>Workout Plans 💪</Text>
-        <Text style={[s.sub,{color:C.textMuted}]}>Tailored for {profile?.goal||'your goal'}</Text>
+        <Text style={[s.sub,{color:C.textMuted}]}>
+          Ordered for your goal ({profile?.goal ?? 'your goal'})
+          {condHint ? ` · ${condHint}` : ''}
+        </Text>
+        <Text style={[s.sub2,{color:C.textDim}]}>
+          Uses the same rules as Home: safer picks (e.g. no heavy barbells) appear first when your profile needs it.
+        </Text>
 
         <View style={[s.weekCard,{backgroundColor:C.card,borderColor:C.border}]}>
           <Text style={[s.weekTitle,{color:C.textMuted}]}>THIS WEEK</Text>
@@ -92,7 +136,7 @@ export default function Workout() {
 
         <Text style={[s.count,{color:C.textDim}]}>{filtered.length} exercises</Text>
 
-        {filtered.map(w=>(
+        {filtered.map((w: any) => (
           <TouchableOpacity key={w.id} style={[s.card,{backgroundColor:C.card,borderColor:C.border}]} onPress={() => router.push({ pathname: '/workout-detail', params: { id: w.id } })}>
             <View style={s.cardTop}>
               <Text style={s.wEmoji}>{w.emoji}</Text>
@@ -124,7 +168,8 @@ const s = StyleSheet.create({
   container:{flex:1},
   scroll:{padding:20,paddingTop:60,paddingBottom:100},
   title:{fontSize:24,fontWeight:'900',marginBottom:4},
-  sub:{fontSize:13,marginBottom:16},
+  sub:{fontSize:13,marginBottom:8},
+  sub2:{fontSize:11,lineHeight:16,marginBottom:16},
   weekCard:{borderWidth:1,borderRadius:20,padding:16,marginBottom:16},
   weekTitle:{fontSize:11,fontWeight:'700',textTransform:'uppercase',letterSpacing:0.8,marginBottom:12},
   weekRow:{flexDirection:'row',gap:5},

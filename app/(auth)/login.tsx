@@ -10,6 +10,8 @@ import FirebaseGoogleSignIn from '../../components/auth/FirebaseGoogleSignIn';
 import { signInWithOAuthProvider } from '../../lib/oauth';
 import { migrateLocalDataToSupabaseAndCleanup } from '../../lib/localToSupabaseMigration';
 import { fetchAllUserDataFromSupabase } from '../../lib/userDataSync';
+import { ensureCurrentUserProfile } from '../../lib/authProfileSync';
+import { mapAuthErrorToArabic } from '../../lib/authErrors';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -20,11 +22,11 @@ export default function Login() {
 
   async function handle() {
     if (!email.trim() || !password) {
-      setError('Please enter email and password');
+      setError('من فضلك أدخل الإيميل وكلمة المرور.');
       return;
     }
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address');
+      setError('من فضلك أدخل إيميل صحيح.');
       return;
     }
     setError('');
@@ -37,15 +39,11 @@ export default function Login() {
       });
 
       if (signInError) {
-        if (signInError.message?.toLowerCase().includes('invalid login credentials')) {
-          setError('Wrong email or password.');
-        } else if (signInError.message?.toLowerCase().includes('email not confirmed')) {
-          setError('Please verify your email first, then try again.');
-        } else {
-          setError(signInError.message || 'Login failed');
-        }
+        setError(mapAuthErrorToArabic(signInError.message || 'Login failed'));
         return;
       }
+
+      await ensureCurrentUserProfile('email');
 
       await migrateLocalDataToSupabaseAndCleanup();
       await fetchAllUserDataFromSupabase();
@@ -57,7 +55,7 @@ export default function Login() {
         router.replace('/onboarding/step1');
       }
     } catch {
-      setError('Unexpected error. Please try again.');
+      setError('حدث خطأ غير متوقع. حاول مرة أخرى.');
     } finally {
       setLoading(false);
     }
@@ -87,21 +85,21 @@ export default function Login() {
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <TouchableOpacity onPress={() => router.back()}><Text style={s.back}>← Back</Text></TouchableOpacity>
           <Text style={s.emoji}>👋</Text>
-          <Text style={s.title}>Welcome back</Text>
-          <Text style={s.sub}>Sign in to continue</Text>
-          <Text style={s.lbl}>Email</Text>
+          <Text style={s.title}>أهلًا بعودتك</Text>
+          <Text style={s.sub}>سجّل دخولك للمتابعة</Text>
+          <Text style={s.lbl}>الإيميل</Text>
           <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="your@email.com" placeholderTextColor="#444" keyboardType="email-address" autoCapitalize="none" />
-          <Text style={s.lbl}>Password</Text>
+          <Text style={s.lbl}>كلمة المرور</Text>
           <TextInput style={s.input} value={password} onChangeText={setPassword} placeholder="••••••••" placeholderTextColor="#444" secureTextEntry />
           <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-            <Text style={s.forgot}>Forgot Password?</Text>
+            <Text style={s.forgot}>نسيت كلمة المرور؟</Text>
           </TouchableOpacity>
           {!!error && <Text style={s.err}>{error}</Text>}
           <TouchableOpacity style={s.btn} onPress={handle} disabled={busy}>
-            <Text style={s.btnT}>{loading ? 'Signing in...' : 'Sign In'}</Text>
+            <Text style={s.btnT}>{loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}</Text>
           </TouchableOpacity>
 
-          <View style={s.divider}><View style={s.divLine} /><Text style={s.divTxt}>or continue with</Text><View style={s.divLine} /></View>
+          <View style={s.divider}><View style={s.divLine} /><Text style={s.divTxt}>أو المتابعة عبر</Text><View style={s.divLine} /></View>
 
           <View style={s.socialRow}>
             <FirebaseGoogleSignIn disabled={busy} onError={setError} intent="signIn" />
@@ -112,7 +110,7 @@ export default function Login() {
           </View>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-            <Text style={s.sw}>No account? <Text style={s.lnk}>Create one</Text></Text>
+            <Text style={s.sw}>ليس لديك حساب؟ <Text style={s.lnk}>إنشاء حساب</Text></Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

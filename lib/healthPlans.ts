@@ -14,16 +14,40 @@ export interface UserHealthPlanRow {
   created_at: string;
 }
 
+function assertValidUserId(userId: string) {
+  if (!userId || typeof userId !== 'string') {
+    throw new Error('Missing user id for health plan operation.');
+  }
+}
+
+function sanitizePlanData(planData: Record<string, any>): Record<string, any> {
+  if (!planData || typeof planData !== 'object' || Array.isArray(planData)) {
+    throw new Error('Invalid plan payload.');
+  }
+  return planData;
+}
+
 function buildRangeDuration(days = 30): { startDate: string; duration: string } {
   const startDate = new Date().toISOString();
   return { startDate, duration: `${days} days` };
 }
 
 async function savePlan(userId: string, planType: PlanType, planData: Record<string, any>): Promise<UserHealthPlanRow | null> {
+  assertValidUserId(userId);
+  const safePlanData = sanitizePlanData(planData);
+
+  // Keep only one active plan per type to avoid duplicates on repeated regeneration.
+  await supabase
+    .from('user_health_plans')
+    .update({ status: 'paused' })
+    .eq('user_id', userId)
+    .eq('plan_type', planType)
+    .eq('status', 'active');
+
   const payload = {
     user_id: userId,
     plan_type: planType,
-    plan_data: planData,
+    plan_data: safePlanData,
     status: 'active',
   };
 
@@ -83,6 +107,7 @@ export async function saveUserWaterPlan(
 }
 
 export async function getUserActivePlans(userId: string): Promise<Record<PlanType, UserHealthPlanRow[]>> {
+  assertValidUserId(userId);
   const { data, error } = await supabase
     .from('user_health_plans')
     .select('*')
@@ -131,4 +156,28 @@ export async function updatePlanProgress(planId: string, progress: number): Prom
 
   if (error) throw error;
   return (data as UserHealthPlanRow) ?? null;
+}
+
+export function subscribeToUserPlans(
+  userId: string,
+  onChange: () => void
+): () => void {
+  if (!userId) return () => undefined;
+  const channel = supabase
+    .channel(`user_health_plans_${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'user_health_plans',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => onChange()
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }

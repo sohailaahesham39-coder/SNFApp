@@ -55,3 +55,17 @@ export async function upsertProfileRow(params: {
   return supabase.from('profiles').upsert(payload, { onConflict: 'id' });
 }
 
+export async function ensureCurrentUserProfile(provider: AuthProviderType = 'email') {
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user?.id || !user.email) return { error: null };
+
+  return upsertProfileRow({
+    id: user.id,
+    email: user.email,
+    fullName: String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? '').trim(),
+    avatarUrl: String(user.user_metadata?.avatar_url ?? ''),
+    provider,
+  });
+}
+

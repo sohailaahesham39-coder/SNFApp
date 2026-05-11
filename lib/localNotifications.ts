@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import { supabase } from './supabase';
 
 export type UserNotificationSettings = {
@@ -41,15 +40,60 @@ export const DEFAULT_NOTIFICATION_SETTINGS: UserNotificationSettings = {
   fcm_token: null,
 };
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+type NotificationsApi = {
+  getPermissionsAsync: () => Promise<{ status: string }>;
+  requestPermissionsAsync: () => Promise<{ status: string }>;
+  setNotificationHandler: (handler: {
+    handleNotification: () => Promise<{
+      shouldShowAlert?: boolean;
+      shouldPlaySound: boolean;
+      shouldSetBadge: boolean;
+      shouldShowBanner: boolean;
+      shouldShowList: boolean;
+    }>;
+  }) => void;
+  scheduleNotificationAsync: (request: unknown) => Promise<string>;
+  cancelAllScheduledNotificationsAsync: () => Promise<void>;
+};
+
+let notificationsApiPromise: Promise<NotificationsApi> | null = null;
+let handlerInstalled = false;
+
+async function getNotificationsApi(): Promise<NotificationsApi> {
+  if (!notificationsApiPromise) {
+    notificationsApiPromise = (async () => {
+      const [permissionsModule, handlerModule, scheduleModule, cancelAllModule] = await Promise.all([
+        import('expo-notifications/build/NotificationPermissions'),
+        import('expo-notifications/build/NotificationsHandler'),
+        import('expo-notifications/build/scheduleNotificationAsync'),
+        import('expo-notifications/build/cancelAllScheduledNotificationsAsync'),
+      ]);
+      return {
+        getPermissionsAsync: permissionsModule.getPermissionsAsync,
+        requestPermissionsAsync: permissionsModule.requestPermissionsAsync,
+        setNotificationHandler: handlerModule.setNotificationHandler,
+        scheduleNotificationAsync: scheduleModule.default as unknown as (request: unknown) => Promise<string>,
+        cancelAllScheduledNotificationsAsync: cancelAllModule.default,
+      };
+    })();
+  }
+  return notificationsApiPromise as Promise<NotificationsApi>;
+}
+
+async function ensureLocalHandlerInstalled(): Promise<void> {
+  if (handlerInstalled) return;
+  const api = await getNotificationsApi();
+  api.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+  handlerInstalled = true;
+}
 
 function parseTime(value: string): { hour: number; minute: number } {
   const [h, m] = value.split(':').map((v) => Number(v));
@@ -65,10 +109,12 @@ async function getUserId(): Promise<string | null> {
 }
 
 export async function requestLocalNotificationPermission(): Promise<boolean> {
-  const current = await Notifications.getPermissionsAsync();
+  const api = await getNotificationsApi();
+  await ensureLocalHandlerInstalled();
+  const current = await api.getPermissionsAsync();
   let status = current.status;
   if (status !== 'granted') {
-    const req = await Notifications.requestPermissionsAsync();
+    const req = await api.requestPermissionsAsync();
     status = req.status;
   }
   return status === 'granted';
@@ -118,11 +164,12 @@ export async function saveNotificationSettings(settings: UserNotificationSetting
 }
 
 async function scheduleDaily(title: string, body: string, time: string, key: string) {
+  const api = await getNotificationsApi();
   const { hour, minute } = parseTime(time);
-  await Notifications.scheduleNotificationAsync({
+  await api.scheduleNotificationAsync({
     content: { title, body, data: { key } },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      type: 'daily',
       hour,
       minute,
     },
@@ -130,10 +177,11 @@ async function scheduleDaily(title: string, body: string, time: string, key: str
 }
 
 async function scheduleWaterEveryHours(intervalHours: number) {
-  await Notifications.scheduleNotificationAsync({
+  const api = await getNotificationsApi();
+  await api.scheduleNotificationAsync({
     content: { title: 'Water Reminder', body: 'Time to drink water! 💧', data: { key: 'water' } },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      type: 'timeInterval',
       seconds: Math.max(1, intervalHours) * 3600,
       repeats: true,
     },
@@ -141,14 +189,15 @@ async function scheduleWaterEveryHours(intervalHours: number) {
 }
 
 async function scheduleWeeklyLabReminder(weekday = 1, hour = 10, minute = 0) {
-  await Notifications.scheduleNotificationAsync({
+  const api = await getNotificationsApi();
+  await api.scheduleNotificationAsync({
     content: {
       title: 'Lab Reminder',
       body: "Don't forget your pending lab tests 🔬",
       data: { key: 'lab' },
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+      type: 'weekly',
       weekday,
       hour,
       minute,
@@ -157,7 +206,9 @@ async function scheduleWeeklyLabReminder(weekday = 1, hour = 10, minute = 0) {
 }
 
 export async function applyLocalNotificationSchedules(settings: UserNotificationSettings): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const api = await getNotificationsApi();
+  await ensureLocalHandlerInstalled();
+  await api.cancelAllScheduledNotificationsAsync();
 
   if (settings.water_reminders) {
     await scheduleWaterEveryHours(settings.water_reminder_interval_hours);
@@ -188,13 +239,16 @@ export async function applyLocalNotificationSchedules(settings: UserNotification
 }
 
 export async function sendTestLocalNotification(): Promise<void> {
-  await Notifications.scheduleNotificationAsync({
+  const api = await getNotificationsApi();
+  await ensureLocalHandlerInstalled();
+  await api.scheduleNotificationAsync({
     content: { title: 'Test Notification', body: 'Notifications are working correctly.' },
     trigger: null,
   });
 }
 
 export async function cancelAllLocalNotifications(): Promise<void> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const api = await getNotificationsApi();
+  await api.cancelAllScheduledNotificationsAsync();
 }
 

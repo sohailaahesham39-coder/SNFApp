@@ -248,6 +248,8 @@ function getFallbackDetail(meal: any) {
 
 import { MEALS } from '../data/localData';
 import { getMeals } from '../lib/database';
+import { supabase } from '../lib/supabase';
+import { healthDataEvents } from '../lib/healthIntegration';
 
 export default function MealDetail() {
   const { isDark } = useTheme();
@@ -286,6 +288,19 @@ export default function MealDetail() {
   if (!meal) return null;
 
   const detail = MEAL_DETAIL_DATA[meal.id as string] || getFallbackDetail(meal);
+
+  async function logMeal() {
+    const { data } = await supabase.auth.getUser();
+    const userId = data.user?.id;
+    if (!userId) return;
+    await healthDataEvents.onMealLogged(userId, {
+      name: meal.name,
+      calories: meal.calories,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+    });
+  }
 
   return (
     <View style={[s.container, { backgroundColor: C.bg }]}>
@@ -392,7 +407,7 @@ export default function MealDetail() {
           </View>
         )}
 
-        <TouchableOpacity style={s.logBtn}>
+        <TouchableOpacity style={s.logBtn} onPress={logMeal}>
           <Text style={s.logBtnT}>+ Log this meal</Text>
         </TouchableOpacity>
       </ScrollView>

@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
 import { isValidEmail } from '../../lib/authValidation';
+import { mapAuthErrorToArabic } from '../../lib/authErrors';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -12,16 +13,16 @@ export default function ForgotPassword() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const redirectTo = useMemo(() => Linking.createURL('reset-password'), []);
+  const redirectTo = useMemo(() => Linking.createURL('auth/callback'), []);
 
   async function onSend() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
-      setError('Please enter your email.');
+      setError('من فضلك أدخل الإيميل.');
       return;
     }
     if (!isValidEmail(normalizedEmail)) {
-      setError('Please enter a valid email address.');
+      setError('من فضلك أدخل إيميل صحيح.');
       return;
     }
 
@@ -33,12 +34,12 @@ export default function ForgotPassword() {
         redirectTo,
       });
       if (resetError) {
-        setError(resetError.message || 'Unable to send reset email.');
+        setError(mapAuthErrorToArabic(resetError.message || 'Unable to send reset email.'));
         return;
       }
-      setSuccess('Check your email for the password reset link.');
+      setSuccess('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.');
     } catch {
-      setError('Unexpected error. Please try again.');
+      setError('حدث خطأ غير متوقع. حاول مرة أخرى.');
     } finally {
       setBusy(false);
     }
@@ -53,10 +54,10 @@ export default function ForgotPassword() {
             <Text style={s.back}>← Back</Text>
           </TouchableOpacity>
 
-          <Text style={s.title}>Reset your password</Text>
-          <Text style={s.sub}>Enter your email and we’ll send you a reset link.</Text>
+          <Text style={s.title}>استعادة كلمة المرور</Text>
+          <Text style={s.sub}>اكتب الإيميل وسنرسل لك رابط تغيير كلمة المرور.</Text>
 
-          <Text style={s.lbl}>Email</Text>
+          <Text style={s.lbl}>الإيميل</Text>
           <TextInput
             style={s.input}
             value={email}
@@ -72,7 +73,7 @@ export default function ForgotPassword() {
           {!!success && <Text style={s.ok}>{success}</Text>}
 
           <TouchableOpacity style={s.btn} onPress={onSend} disabled={busy}>
-            <Text style={s.btnT}>{busy ? 'Sending…' : 'Send reset link'}</Text>
+            <Text style={s.btnT}>{busy ? 'جارٍ الإرسال...' : 'إرسال رابط الاستعادة'}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

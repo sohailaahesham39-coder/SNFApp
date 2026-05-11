@@ -23,6 +23,7 @@ import { supabase } from '../../lib/supabase';
 import { type UserHealthPlanRow } from '../../lib/healthPlans';
 import { cancelAllLocalNotifications } from '../../lib/localNotifications';
 import { clearPushTokenOnLogout } from '../../lib/pushNotifications';
+import { getHabitCompletionMap, listHabits, type UserHabit } from '../../lib/habits';
 
 const { width } = Dimensions.get('window');
 
@@ -114,6 +115,8 @@ export default function Profile() {
   const [showHelp, setShowHelp] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [planHistory, setPlanHistory] = useState<UserHealthPlanRow[]>([]);
+  const [userHabits, setUserHabits] = useState<UserHabit[]>([]);
+  const [todayHabitMap, setTodayHabitMap] = useState<Record<string, boolean>>({});
   const [editDraft, setEditDraft] = useState({
     name: '',
     email: '',
@@ -181,16 +184,20 @@ export default function Profile() {
     await saveProfileLocallyAndPush(next);
     await upsertOnboardingDataFromProfile(next);
     setProfile(next);
-    const mlResult = runMLEngine({
-      weight: next.weight,
-      targetCalories: next.targetCalories,
-      goal: next.goal,
-      activity: next.activity,
-      age: next.age,
-      bmi: next.bmi,
-      conditions: next.conditions ?? [],
-    });
-    setML(mlResult);
+    try {
+      const mlResult = runMLEngine({
+        weight: next.weight,
+        targetCalories: next.targetCalories,
+        goal: next.goal,
+        activity: next.activity,
+        age: next.age,
+        bmi: next.bmi,
+        conditions: next.conditions ?? [],
+      });
+      setML(mlResult);
+    } catch {
+      setML(null);
+    }
     setShowEditProfile(false);
   }
 
@@ -198,13 +205,17 @@ export default function Profile() {
     loadProfileSupabaseFirst().then(p => {
       if (!p) return;
       setProfile(p);
-      const mlResult = runMLEngine({
-        weight: p.weight, targetCalories: p.targetCalories,
-        goal: p.goal, activity: p.activity, age: p.age,
-        bmi: p.bmi, conditions: p.conditions ?? [],
-      });
-      setML(mlResult);
-      const habits = (p as any).habits ?? [];
+      try {
+        const mlResult = runMLEngine({
+          weight: p.weight, targetCalories: p.targetCalories,
+          goal: p.goal, activity: p.activity, age: p.age,
+          bmi: p.bmi, conditions: p.conditions ?? [],
+        });
+        setML(mlResult);
+      } catch {
+        setML(null);
+      }
+      const habits = ((p as any).habits?.length ? (p as any).habits : (p as any).healthHabits) ?? [];
       const plans = habits
         .filter((h: string) => h !== 'None' && HABIT_QUESTIONS[h])
         .map((h: string) => {
@@ -214,7 +225,9 @@ export default function Profile() {
         });
       setHabitPlans(plans);
       if (plans.length > 0) setSelectedHabit(plans[0].habitName);
-    });
+    }).catch(() => {});
+    listHabits().then(setUserHabits).catch(() => setUserHabits([]));
+    getHabitCompletionMap().then(setTodayHabitMap).catch(() => setTodayHabitMap({}));
     supabase.auth.getUser().then(async ({ data }) => {
       const userId = data.user?.id;
       if (!userId) return;
@@ -356,7 +369,7 @@ export default function Profile() {
         <View style={s.avatarSec}>
           <View style={[s.avatarRing, { backgroundColor: C.accent + '22' }]}>
             <View style={[s.avatar, { backgroundColor: C.accent + '15' }]}>
-              <Text style={[s.avatarT, { color: C.accent }]}>{profile.name.charAt(0)}</Text>
+              <Text style={[s.avatarT, { color: C.accent }]}>{(profile.name?.trim()?.[0] ?? 'U').toUpperCase()}</Text>
             </View>
           </View>
           <Text style={[s.pName, { color: C.text }]}>{profile.name}</Text>
@@ -366,7 +379,7 @@ export default function Profile() {
           </View>
         </View>
 
-        <View style={s.sectionTabs}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.sectionTabs}>
           {SECTIONS.map(section => (
             <TouchableOpacity
               key={section.id}
@@ -377,13 +390,19 @@ export default function Profile() {
                   borderColor: activeSection === section.id ? C.accent : C.border,
                 },
               ]}
-              onPress={() => setActiveSection(section.id)}
+              onPress={() => {
+                if (section.id === 'insights') {
+                  router.push('/(tabs)/chat');
+                  return;
+                }
+                setActiveSection(section.id);
+              }}
             >
               <Text style={[s.secTabIcon, { color: C.text }]}>{section.icon}</Text>
               <Text style={[s.secTabLabel, { color: C.text }]}>{section.label}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
         {activeSection === 'stats' && (
           <>
@@ -454,7 +473,23 @@ export default function Profile() {
         )}
 
         {activeSection === 'habits' && (
-          currentHabitPlan ? (
+          userHabits.length > 0 ? (
+            <View style={[s.card, { borderColor: C.border, backgroundColor: C.bg2 }]}>
+              <Text style={[s.cardLbl, { color: C.text }]}>Your Habit Tracker</Text>
+              {userHabits.slice(0, 5).map((habit) => (
+                <View key={habit.id} style={s.metricRow}>
+                  <Text style={[s.metricIcon, { color: C.text }]}>🎯</Text>
+                  <Text style={[s.metricLbl, { color: C.text }]}>{habit.name}</Text>
+                  <Text style={[s.metricVal, { color: todayHabitMap[habit.id] ? C.accent2 : C.textMuted }]}>
+                    {todayHabitMap[habit.id] ? 'Done today' : 'Pending'}
+                  </Text>
+                </View>
+              ))}
+              <TouchableOpacity style={[s.btnSolid, { backgroundColor: C.accent }]} onPress={() => router.push('/habits')}>
+                <Text style={[s.btnSolidTxt, { color: C.onAccent }]}>Open habits manager</Text>
+              </TouchableOpacity>
+            </View>
+          ) : currentHabitPlan ? (
             <View style={[s.card, { borderColor: C.border, backgroundColor: C.bg2 }]}> 
               <Text style={[s.cardLbl, { color: C.text }]}>{currentHabitPlan.habitName}</Text>
               <View style={s.metricRow}>
@@ -479,7 +514,10 @@ export default function Profile() {
             <View style={s.emptyState}>
               <Text style={[s.emptyEmoji, { color: C.text }]}>🤍</Text>
               <Text style={[s.emptyTitle, { color: C.text }]}>No habits found</Text>
-              <Text style={[s.emptySub, { color: C.textMuted }]}>Add habits in your profile to see your plan.</Text>
+              <Text style={[s.emptySub, { color: C.textMuted }]}>Add habits and track them from habits manager.</Text>
+              <TouchableOpacity style={[s.btnSolid, { backgroundColor: C.accent }]} onPress={() => router.push('/habits')}>
+                <Text style={[s.btnSolidTxt, { color: C.onAccent }]}>Go to habits manager</Text>
+              </TouchableOpacity>
             </View>
           )
         )}
@@ -603,6 +641,12 @@ export default function Profile() {
         onPress={() => router.push('/notifications-settings')}
       >
         <Text style={[s.btnSolidTxt, { color: C.text }]}>Notification settings</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[s.btnSolid, { backgroundColor: C.card, borderColor: C.border, borderWidth: 1 }]}
+        onPress={() => router.push('/alerts')}
+      >
+        <Text style={[s.btnSolidTxt, { color: C.text }]}>Alerts center</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[s.btnSolid, { backgroundColor: C.accent }]}

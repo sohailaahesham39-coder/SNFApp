@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
@@ -15,11 +15,33 @@ import {
 import { normalizeHealthDrinks, normalizedHabitsList } from '../../lib/healthDrinks';
 import { supabase } from '../../lib/supabase';
 import {
+  getUserActivePlans,
   saveUserHabitPlan,
   saveUserLabPlan,
   saveUserVitaminPlan,
   saveUserWaterPlan,
 } from '../../lib/healthPlans';
+import { refreshHomeDashboard } from '../../lib/healthIntegration';
+import { unifiedMedicalConditions } from '../../lib/healthProfileCoherence';
+
+function orderSafeDeficienciesForHome(defs: any[], prioritizeNutrient?: string) {
+  const safe = defs.filter((d) => d.riskLevel !== 'lab_required_first');
+  if (!prioritizeNutrient) return safe.slice(0, 8);
+  const want = prioritizeNutrient.trim().toLowerCase();
+  const key = (d: any) => String(d.nutrient ?? d.name ?? '').toLowerCase();
+  const first = safe.find((d) => key(d) === want);
+  const rest = safe.filter((d) => key(d) !== want);
+  const merged = first ? [first, ...rest] : safe;
+  const seen = new Set<string>();
+  return merged
+    .filter((d) => {
+      const k = key(d);
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, 8);
+}
 
 type Section = 'overview' | 'analysis' | 'labs' | 'plan' | 'supplements';
 
@@ -35,10 +57,67 @@ export default function HealthTab() {
   const [labPlan, setLabPlan] = useState<any>(null);
   const [habitPlan, setHabitPlan] = useState<any>(null);
   const [safePlan, setSafePlan] = useState<any>(null);
+  const [planSaving, setPlanSaving] = useState(false);
 
   useFocusEffect(useCallback(() => {
     loadData();
   }, []));
+
+  async function activatePlansOnHome(prioritizeNutrient?: string) {
+    const authUser = await supabase.auth.getUser();
+    const userId = authUser.data.user?.id;
+    if (!userId) {
+      Alert.alert('Sign in required', 'Please sign in to save plans to Home.');
+      return;
+    }
+    setPlanSaving(true);
+    try {
+      const safeList = orderSafeDeficienciesForHome(deficiencies, prioritizeNutrient);
+      if (safeList.length > 0) {
+        await saveUserVitaminPlan(userId, safeList);
+      }
+
+      if (labPlan && Number(labPlan.totalTests ?? 0) > 0) {
+        const tests = [
+          ...(labPlan.urgent ?? []),
+          ...(labPlan.high ?? []),
+          ...(labPlan.medium ?? []),
+        ];
+        if (tests.length > 0) await saveUserLabPlan(userId, tests);
+      }
+
+      const p = profile;
+      if (p) {
+        const conditions = unifiedMedicalConditions(p);
+        const symptoms = (p as any).healthSymptoms || [];
+        const habits = normalizedHabitsList((p as any).healthHabits);
+        const drinksObj = normalizeHealthDrinks((p as any).healthDrinks);
+        const coffeeCups = drinksObj.coffee ?? 0;
+        if (coffeeCups > 2) {
+          const generatedHabit = await generateHabitReductionPlan('drink_coffee', coffeeCups, conditions, symptoms);
+          await saveUserHabitPlan(userId, 'drink_coffee', generatedHabit);
+        }
+        const weight = typeof (p as any).weight === 'number' ? (p as any).weight : 70;
+        const waterGoal = Math.max(1800, Math.round(weight * 35));
+        await saveUserWaterPlan(userId, waterGoal, ['08:00', '12:30', '17:00', '20:30']);
+      }
+
+      await refreshHomeDashboard(userId);
+
+      Alert.alert(
+        'Plans synced to Home',
+        'Vitamins (safe items), lab list, water target, and habit plan (if applicable) are now active. Check the Home tab.',
+        [
+          { text: 'Open Home', onPress: () => router.push('/(tabs)/home') },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert('Could not save', e?.message ?? 'Check your connection and try again.');
+    } finally {
+      setPlanSaving(false);
+    }
+  }
 
   async function loadData() {
     const p = await loadProfileSupabaseFirst();
@@ -51,7 +130,7 @@ export default function HealthTab() {
     setProfile(p);
 
     // Generate analysis
-    const conditions = (p as any).healthConditions || [];
+    const conditions = unifiedMedicalConditions(p);
     const symptoms = (p as any).healthSymptoms || [];
     const habits = normalizedHabitsList((p as any).healthHabits);
     const drinksObj = normalizeHealthDrinks((p as any).healthDrinks);
@@ -99,15 +178,27 @@ export default function HealthTab() {
     const authUser = await supabase.auth.getUser();
     const userId = authUser.data.user?.id;
     if (userId) {
-      if (defAnalysis.length > 0) await saveUserVitaminPlan(userId, defAnalysis.slice(0, 3));
-      if (labs?.totalTests > 0) await saveUserLabPlan(userId, [...labs.urgent, ...labs.high, ...labs.medium]);
-      if (coffeeCups > 2) {
+      const existingActive = await getUserActivePlans(userId).catch(() => ({
+        vitamin: [],
+        lab: [],
+        habit: [],
+        water: [],
+      }));
+      if (defAnalysis.length > 0 && existingActive.vitamin.length === 0) {
+        await saveUserVitaminPlan(userId, defAnalysis.slice(0, 3));
+      }
+      if (labs?.totalTests > 0 && existingActive.lab.length === 0) {
+        await saveUserLabPlan(userId, [...labs.urgent, ...labs.high, ...labs.medium]);
+      }
+      if (coffeeCups > 2 && existingActive.habit.length === 0) {
         const generatedHabit = await generateHabitReductionPlan('drink_coffee', coffeeCups, conditions, symptoms);
         await saveUserHabitPlan(userId, 'drink_coffee', generatedHabit);
       }
       const weight = typeof (p as any).weight === 'number' ? (p as any).weight : 70;
       const waterGoal = Math.max(1800, Math.round(weight * 35));
-      await saveUserWaterPlan(userId, waterGoal, ['08:00', '12:30', '17:00', '20:30']);
+      if (existingActive.water.length === 0) {
+        await saveUserWaterPlan(userId, waterGoal, ['08:00', '12:30', '17:00', '20:30']);
+      }
     }
   }
 
@@ -183,7 +274,7 @@ export default function HealthTab() {
               <View style={s.statRow}>
                 <View style={s.statItem}>
                   <Text style={[s.statNum, { color: C.accent }]}>
-                    {(profile as any).healthConditions?.length || 0}
+                    {unifiedMedicalConditions(profile).length}
                   </Text>
                   <Text style={[s.statLabel, { color: C.textMuted }]}>Conditions</Text>
                 </View>
@@ -236,6 +327,23 @@ export default function HealthTab() {
                 View Full Analysis →
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.actionBtn, { backgroundColor: C.card, borderWidth: 1.5, borderColor: C.accent, marginTop: 12 }]}
+              disabled={planSaving}
+              onPress={() => void activatePlansOnHome()}
+            >
+              {planSaving ? (
+                <ActivityIndicator color={C.accent} />
+              ) : (
+                <Text style={[s.actionBtnText, { color: C.accent }]}>
+                  Sync plans to Home (vitamins · labs · water)
+                </Text>
+              )}
+            </TouchableOpacity>
+            <Text style={[s.syncHint, { color: C.textMuted }]}>
+              Uses your questionnaire data. Safe supplement rows are sent to the Home checklist; workouts follow your conditions on the Workout tab.
+            </Text>
           </>
         )}
 
@@ -247,6 +355,24 @@ export default function HealthTab() {
             <Text style={[s.sectionTitle, { color: C.textMuted }]}>
               DEFICIENCY ANALYSIS REPORT
             </Text>
+
+            <View style={[s.syncCard, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[s.syncTitle, { color: C.text }]}>Activate on Home screen</Text>
+              <Text style={[s.syncBody, { color: C.textMuted }]}>
+                Tap once to save safe recommendations, your lab list, water goal, and habit plan (if any) to Supabase and refresh your Home dashboard.
+              </Text>
+              <TouchableOpacity
+                style={[s.actionBtn, { backgroundColor: C.accent, marginBottom: 0 }]}
+                disabled={planSaving}
+                onPress={() => void activatePlansOnHome()}
+              >
+                {planSaving ? (
+                  <ActivityIndicator color={C.onAccent} />
+                ) : (
+                  <Text style={[s.actionBtnText, { color: C.onAccent }]}>Sync everything to Home →</Text>
+                )}
+              </TouchableOpacity>
+            </View>
             
             {deficiencies.map((def, idx) => (
               <View key={idx} style={[s.analysisCard, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -277,21 +403,37 @@ export default function HealthTab() {
                 {/* Risk Level */}
                 <View style={[s.section, { borderTopColor: C.border }]}>
                   <Text style={[s.sectionLabel, { color: C.textMuted }]}>RISK LEVEL</Text>
-                  <View style={[s.riskBadge, { 
-                    backgroundColor: def.riskLevel === 'lab_required_first' ? '#FF6B6B20' : 
-                                   def.riskLevel === 'caution' ? '#FF9D4D20' : '#4DFF9E20',
-                    borderColor: def.riskLevel === 'lab_required_first' ? '#FF6B6B' : 
-                                def.riskLevel === 'caution' ? '#FF9D4D' : '#4DFF9E',
-                  }]}>
-                    <Text style={[s.riskText, { 
-                      color: def.riskLevel === 'lab_required_first' ? '#FF6B6B' : 
-                            def.riskLevel === 'caution' ? '#FF9D4D' : '#4DFF9E' 
-                    }]}>
-                      {def.riskLevel === 'lab_required_first' ? '⚠️ LAB TEST REQUIRED FIRST' :
-                       def.riskLevel === 'caution' ? '⚠️ CAUTION - Monitor Closely' :
-                       '✅ SAFE TO START'}
-                    </Text>
-                  </View>
+                  {def.riskLevel === 'lab_required_first' ? (
+                    <View
+                      style={[s.riskBadge, {
+                        backgroundColor: '#FF6B6B20',
+                        borderColor: '#FF6B6B',
+                      }]}
+                    >
+                      <Text style={[s.riskText, { color: '#FF6B6B' }]}>
+                        ⚠️ LAB TEST REQUIRED FIRST
+                      </Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      disabled={planSaving}
+                      onPress={() => void activatePlansOnHome(def.nutrient)}
+                      style={[s.riskBadge, {
+                        backgroundColor: def.riskLevel === 'caution' ? '#FF9D4D20' : '#4DFF9E20',
+                        borderColor: def.riskLevel === 'caution' ? '#FF9D4D' : '#4DFF9E',
+                      }]}
+                    >
+                      <Text style={[s.riskText, {
+                        color: def.riskLevel === 'caution' ? '#FF9D4D' : '#4DFF9E',
+                      }]}>
+                        {def.riskLevel === 'caution' ? '⚠️ CAUTION - Monitor Closely' : '✅ SAFE TO START'}
+                      </Text>
+                      <Text style={[s.riskTapHint, { color: C.textMuted }]}>
+                        Tap to sync plans to Home (this item listed first)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {/* Supplement (if safe) */}
@@ -529,12 +671,12 @@ const s = StyleSheet.create({
   header: { padding: 20, paddingBottom: 10 },
   title: { fontSize: 28, fontWeight: '900', marginBottom: 4 },
   subtitle: { fontSize: 14 },
-  tabs: { paddingHorizontal: 20, marginBottom: 16 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, marginRight: 8 },
+  tabs: { paddingHorizontal: 20, marginBottom: 18 },
+  tab: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1.5, marginRight: 8 },
   tabIcon: { fontSize: 16 },
   tabLabel: { fontSize: 13, fontWeight: '700' },
   scroll: { padding: 20, paddingTop: 0, paddingBottom: 100 },
-  card: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 16 },
+  card: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 18 },
   cardTitle: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
   statRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
@@ -546,9 +688,9 @@ const s = StyleSheet.create({
   concernConf: { fontSize: 12, marginTop: 2 },
   badge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   badgeText: { fontSize: 11, fontWeight: '700' },
-  actionBtn: { borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 16 },
+  actionBtn: { minHeight: 48, borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   actionBtnText: { fontSize: 16, fontWeight: '700' },
-  sectionTitle: { fontSize: 12, fontWeight: '700', marginBottom: 12, letterSpacing: 0.5 },
+  sectionTitle: { fontSize: 13, fontWeight: '800', marginBottom: 12, letterSpacing: 0.5 },
   analysisCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 16 },
   analysisHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
   analysisTitle: { fontSize: 18, fontWeight: '900' },
@@ -588,4 +730,9 @@ const s = StyleSheet.create({
   testWhy: { fontSize: 12, marginTop: 4, lineHeight: 18 },
   testFasting: { fontSize: 12, marginTop: 6, fontWeight: '600' },
   tipText: { fontSize: 13, lineHeight: 20, marginBottom: 6 },
+  syncCard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 18 },
+  syncTitle: { fontSize: 16, fontWeight: '800', marginBottom: 8 },
+  syncBody: { fontSize: 12, lineHeight: 18, marginBottom: 14 },
+  syncHint: { fontSize: 11, lineHeight: 16, marginTop: 8, textAlign: 'center' },
+  riskTapHint: { fontSize: 10, marginTop: 8, textAlign: 'center', fontWeight: '600' },
 });

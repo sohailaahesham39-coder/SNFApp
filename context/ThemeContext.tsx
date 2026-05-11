@@ -90,14 +90,14 @@ function lightColorsFromAccent(preset: LightAccentPreset) {
   return {
     bg: '#FAF6EA',
     bg2: CREMA,
-    bg3: '#EDE2C2',
+    bg3: '#E6DAB7',
     card: '#FFFFFF',
     cardSolid: '#FFFFFF',
-    border: 'rgba(148,179,138,0.25)',
-    borderStrong: 'rgba(148,179,138,0.45)',
-    text: '#3D2817',
-    textMuted: '#7A5C3F',
-    textDim: '#A89078',
+    border: 'rgba(61,40,23,0.18)',
+    borderStrong: 'rgba(61,40,23,0.30)',
+    text: '#2A1A0F',
+    textMuted: '#5A402C',
+    textDim: '#7E624C',
     accent,
     accent2,
     accent3,
@@ -118,17 +118,17 @@ export function getColors(isDark: boolean, lightAccent: LightAccentPreset = 'pea
       bg:           '#080808',
       bg2:          '#0d0d0d',
       bg3:          '#1a1a1a',
-      card:         'rgba(255,255,255,0.03)',
+      card:         '#141414',
       cardSolid:    '#151515',
       
       // Borders
-      border:       'rgba(255,255,255,0.08)',
-      borderStrong: 'rgba(255,255,255,0.15)',
+      border:       'rgba(255,255,255,0.14)',
+      borderStrong: 'rgba(255,255,255,0.24)',
       
       // Text
       text:         '#ffffff',
-      textMuted:    '#888888',
-      textDim:      '#555555',
+      textMuted:    '#B0B0B0',
+      textDim:      '#7D7D7D',
       
       // Accents
       accent:       '#E8FF4D',   // lime yellow

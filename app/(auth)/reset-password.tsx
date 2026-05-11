@@ -1,22 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
 
-function parseResetParams(url: string | null): { accessToken?: string; refreshToken?: string; type?: string } {
+function parseHashParams(url: string): Record<string, string> {
+  const hashIndex = url.indexOf('#');
+  if (hashIndex === -1) return {};
+  const hash = url.slice(hashIndex + 1);
+  const params = new URLSearchParams(hash);
+  const out: Record<string, string> = {};
+  params.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+}
+
+function parseResetParams(url: string | null): { accessToken?: string; refreshToken?: string; type?: string; code?: string } {
   if (!url) return {};
   const parsed = Linking.parse(url);
   const params = (parsed.queryParams ?? {}) as Record<string, string | undefined>;
+  const hashParams = parseHashParams(url);
   return {
-    accessToken: params.access_token,
-    refreshToken: params.refresh_token,
-    type: params.type,
+    accessToken: params.access_token ?? hashParams.access_token,
+    refreshToken: params.refresh_token ?? hashParams.refresh_token,
+    type: params.type ?? hashParams.type,
+    code: params.code ?? hashParams.code,
   };
 }
 
 export default function ResetPassword() {
+  const localParams = useLocalSearchParams<{
+    access_token?: string;
+    refresh_token?: string;
+    type?: string;
+    code?: string;
+  }>();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,18 +44,18 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState('');
   const [ready, setReady] = useState(false);
 
-  const [sessionParams, setSessionParams] = useState<{ accessToken?: string; refreshToken?: string; type?: string }>({});
+  const [sessionParams, setSessionParams] = useState<{ accessToken?: string; refreshToken?: string; type?: string; code?: string }>({});
 
   const helpText = useMemo(() => {
-    if (!ready) return 'Loading reset link…';
-    if (!sessionParams.accessToken || !sessionParams.refreshToken) {
-      return 'This reset link is missing required tokens. Please request a new reset email.';
+    if (!ready) return 'جارٍ تحميل رابط الاستعادة...';
+    if (!sessionParams.accessToken && !sessionParams.code) {
+      return 'رابط الاستعادة غير مكتمل. من فضلك اطلب رابطًا جديدًا.';
     }
     if (sessionParams.type && sessionParams.type !== 'recovery') {
-      return 'This link is not a password recovery link. Please request a new reset email.';
+      return 'هذا الرابط ليس رابط استعادة كلمة المرور.';
     }
     return '';
-  }, [ready, sessionParams.accessToken, sessionParams.refreshToken, sessionParams.type]);
+  }, [ready, sessionParams.accessToken, sessionParams.code, sessionParams.type]);
 
   useEffect(() => {
     let mounted = true;
@@ -66,46 +86,64 @@ export default function ResetPassword() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!localParams) return;
+    setSessionParams((prev) => ({
+      accessToken: (localParams.access_token as string | undefined) ?? prev.accessToken,
+      refreshToken: (localParams.refresh_token as string | undefined) ?? prev.refreshToken,
+      type: (localParams.type as string | undefined) ?? prev.type,
+      code: (localParams.code as string | undefined) ?? prev.code,
+    }));
+  }, [localParams.access_token, localParams.refresh_token, localParams.type, localParams.code]);
+
   async function onUpdate() {
     setError('');
     setSuccess('');
 
-    if (!sessionParams.accessToken || !sessionParams.refreshToken) {
-      setError('Invalid reset link. Please request a new reset email.');
+    if (!sessionParams.accessToken && !sessionParams.code) {
+      setError('رابط الاستعادة غير صالح. اطلب رابطًا جديدًا.');
       return;
     }
 
     if (!password || password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');
       return;
     }
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setError('كلمتا المرور غير متطابقتين.');
       return;
     }
 
     setBusy(true);
     try {
       // Establish a session from the recovery tokens, then update password.
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: sessionParams.accessToken,
-        refresh_token: sessionParams.refreshToken,
-      });
-      if (sessionError) {
-        setError(sessionError.message || 'Unable to verify reset link.');
-        return;
+      if (sessionParams.accessToken && sessionParams.refreshToken) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: sessionParams.accessToken,
+          refresh_token: sessionParams.refreshToken,
+        });
+        if (sessionError) {
+          setError(sessionError.message || 'تعذر التحقق من رابط الاستعادة.');
+          return;
+        }
+      } else if (sessionParams.code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(sessionParams.code);
+        if (exchangeError) {
+          setError(exchangeError.message || 'تعذر التحقق من رابط الاستعادة.');
+          return;
+        }
       }
 
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
-        setError(updateError.message || 'Unable to update password.');
+        setError(updateError.message || 'تعذر تحديث كلمة المرور.');
         return;
       }
 
-      setSuccess('Password updated successfully. You can now log in.');
+      setSuccess('تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.');
       setTimeout(() => router.replace('/(auth)/login'), 900);
     } catch {
-      setError('Unexpected error. Please try again.');
+      setError('حدث خطأ غير متوقع. حاول مرة أخرى.');
     } finally {
       setBusy(false);
     }
@@ -114,8 +152,7 @@ export default function ResetPassword() {
   const canSubmit =
     ready &&
     !busy &&
-    !!sessionParams.accessToken &&
-    !!sessionParams.refreshToken &&
+    (!!sessionParams.code || (!!sessionParams.accessToken && !!sessionParams.refreshToken)) &&
     (sessionParams.type ? sessionParams.type === 'recovery' : true);
 
   return (
@@ -123,14 +160,14 @@ export default function ResetPassword() {
       <LinearGradient colors={['#050505', '#0a0f08']} style={StyleSheet.absoluteFill} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={s.title}>Set a new password</Text>
-          <Text style={s.sub}>Enter your new password below.</Text>
+          <Text style={s.title}>تعيين كلمة مرور جديدة</Text>
+          <Text style={s.sub}>أدخل كلمة المرور الجديدة.</Text>
 
           {!!helpText && <Text style={s.hint}>{helpText}</Text>}
           {!!error && <Text style={s.err}>{error}</Text>}
           {!!success && <Text style={s.ok}>{success}</Text>}
 
-          <Text style={s.lbl}>New password</Text>
+          <Text style={s.lbl}>كلمة المرور الجديدة</Text>
           <TextInput
             style={s.input}
             value={password}
@@ -140,7 +177,7 @@ export default function ResetPassword() {
             secureTextEntry
           />
 
-          <Text style={s.lbl}>Confirm password</Text>
+          <Text style={s.lbl}>تأكيد كلمة المرور</Text>
           <TextInput
             style={s.input}
             value={confirm}
@@ -151,11 +188,11 @@ export default function ResetPassword() {
           />
 
           <TouchableOpacity style={[s.btn, !canSubmit && { opacity: 0.55 }]} onPress={onUpdate} disabled={!canSubmit}>
-            <Text style={s.btnT}>{busy ? 'Updating…' : 'Update password'}</Text>
+            <Text style={s.btnT}>{busy ? 'جارٍ التحديث...' : 'تحديث كلمة المرور'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
-            <Text style={s.back}>Back to login</Text>
+            <Text style={s.back}>الرجوع لتسجيل الدخول</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

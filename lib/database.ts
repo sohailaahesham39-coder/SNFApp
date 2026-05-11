@@ -6,7 +6,7 @@ export async function getMeals() {
     const { data, error } = await supabase
       .from('local_meals')
       .select('*')
-      .limit(30);
+      .limit(80);
     if (error || !data || data.length === 0) return MEALS;
     return data.map((m: any) => ({
       id: m.id,
@@ -38,7 +38,7 @@ export async function getWorkouts() {
     const { data, error } = await supabase
       .from('local_workouts')
       .select('*')
-      .limit(30);
+      .limit(80);
     if (error || !data || data.length === 0) return WORKOUTS;
     return data.map((w: any) => ({
       id: w.id,
@@ -170,7 +170,7 @@ export async function getUserProgress(userId: string) {
       .select('*')
       .eq('user_id', userId)
       .order('log_date', { ascending: false })
-      .limit(30);
+      .limit(80);
     if (error) return null;
     return data;
   } catch { return null; }

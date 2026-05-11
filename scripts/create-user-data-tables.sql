@@ -34,10 +34,15 @@ create table if not exists public.user_daily_logs (
   vitamins_taken text[] not null default '{}',
   calories_consumed numeric,
   calories_goal numeric,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists idx_user_daily_logs_user_id_log_date
+  on public.user_daily_logs (user_id, log_date);
+
+-- Needed for RPC update_daily_progress_batch (on conflict) in create-health-sync-layer.sql
+create unique index if not exists ux_user_daily_logs_user_date
   on public.user_daily_logs (user_id, log_date);
 
 -- 3) user_health_progress
@@ -134,4 +139,7 @@ create policy "Users can delete own health progress"
 on public.user_health_progress
 for delete
 using (auth.uid() = user_id);
+
+-- Upgrade path (older DBs created before this column / index):
+alter table public.user_daily_logs add column if not exists updated_at timestamptz not null default now();
 

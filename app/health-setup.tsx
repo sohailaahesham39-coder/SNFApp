@@ -12,8 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, useThemeColors } from '../context/ThemeContext';
-import { loadProfile, UserProfile } from '../data/userStore';
+import { UserProfile } from '../data/userStore';
 import { saveProfileLocallyAndPush } from '../lib/profileSupabase';
+import { loadProfileSupabaseFirst } from '../lib/supabaseUserData';
+import { upsertOnboardingDataFromProfile } from '../lib/supabaseUserData';
+import { ensurePersonalizedPlans } from '../lib/personalization';
+import { supabase } from '../lib/supabase';
+import { healthDataEvents } from '../lib/healthIntegration';
 import {
   CHRONIC_CONDITIONS,
   SYMPTOMS_LIST,
@@ -55,7 +60,7 @@ export default function HealthSetup() {
 
     async function init() {
       try {
-        const current = await loadProfile();
+        const current = await loadProfileSupabaseFirst();
         if (!mounted) return;
 
         setProfile(current);
@@ -112,9 +117,20 @@ export default function HealthSetup() {
       };
 
       await saveProfileLocallyAndPush(updated as UserProfile);
+      await upsertOnboardingDataFromProfile(updated as UserProfile);
+      await ensurePersonalizedPlans(updated as UserProfile);
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
+      if (userId) {
+        await healthDataEvents.onHealthProfileUpdated(
+          userId,
+          { medical_conditions: selectedConditions, symptoms: selectedSymptoms, habits: selectedHabits },
+          updated as UserProfile
+        );
+      }
 
       Alert.alert('Saved', 'Health profile saved successfully.', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)/health') },
+        { text: 'OK', onPress: () => router.replace('/(tabs)/home') },
       ]);
     } catch {
       Alert.alert('Error', 'Failed to save the health profile.');

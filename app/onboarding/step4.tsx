@@ -6,6 +6,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { calculateBMI, calculateBMR, calculateTDEE, getTargetCalories } from '../../data/userStore';
 import { saveProfileLocallyAndPush } from '../../lib/profileSupabase';
 import { upsertOnboardingDataFromProfile } from '../../lib/supabaseUserData';
+import { ensurePersonalizedPlans } from '../../lib/personalization';
+import { supabase } from '../../lib/supabase';
+import { healthDataEvents } from '../../lib/healthIntegration';
 
 const HEALTH_CONDITIONS = [
   { id: 1, name: 'Diabetes Type 2', icon: '💉' },
@@ -75,20 +78,25 @@ export default function Step4() {
     const bmr = calculateBMR(weight, height, age, gender);
     const tdee = calculateTDEE(bmr, activity);
     const targetCalories = getTargetCalories(tdee, goal);
-    await saveProfileLocallyAndPush({
+    const nextProfile = {
       name, email, age, gender, height, weight, goal, activity,
       conditions: conditions.filter(c => c !== 'None'),
       allergens: allergens.filter(a => a !== 'None'),
       habits: habits.filter(h => h !== 'None'),
       bmi, bmr, tdee, targetCalories
-    });
-    await upsertOnboardingDataFromProfile({
-      name, email, age, gender, height, weight, goal, activity,
-      conditions: conditions.filter(c => c !== 'None'),
-      allergens: allergens.filter(a => a !== 'None'),
-      habits: habits.filter(h => h !== 'None'),
-      bmi, bmr, tdee, targetCalories
-    });
+    };
+    await saveProfileLocallyAndPush(nextProfile);
+    await upsertOnboardingDataFromProfile(nextProfile);
+    await ensurePersonalizedPlans(nextProfile as any);
+    const { data } = await supabase.auth.getUser();
+    const userId = data.user?.id;
+    if (userId) {
+      await healthDataEvents.onHealthProfileUpdated(
+        userId,
+        { medical_conditions: nextProfile.conditions, allergies: nextProfile.allergens, habits: nextProfile.habits },
+        nextProfile as any
+      );
+    }
     await AsyncStorage.removeItem('sn_temp_user');
     setLoading(false);
     router.replace('/health-setup');

@@ -19,13 +19,42 @@ function Inner() {
   const router = useRouter();
 
   useEffect(() => {
+    function parseHashParams(url: string): Record<string, string> {
+      const hashIndex = url.indexOf('#');
+      if (hashIndex === -1) return {};
+      const params = new URLSearchParams(url.slice(hashIndex + 1));
+      const out: Record<string, string> = {};
+      params.forEach((v, k) => {
+        out[k] = v;
+      });
+      return out;
+    }
+
     async function handleAuthCallback(url: string) {
       if (!url || !url.includes('auth/callback')) return;
       const parsed = Linking.parse(url);
       const query = (parsed.queryParams ?? {}) as Record<string, string | undefined>;
+      const hash = parseHashParams(url);
+      const code = query.code ?? hash.code;
+      const type = query.type ?? hash.type;
+      const accessToken = query.access_token ?? hash.access_token;
+      const refreshToken = query.refresh_token ?? hash.refresh_token;
 
-      if (query.code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(query.code);
+      if (type === 'recovery' && (code || (accessToken && refreshToken))) {
+        router.replace({
+          pathname: '/(auth)/reset-password',
+          params: {
+            ...(code ? { code } : {}),
+            ...(accessToken ? { access_token: accessToken } : {}),
+            ...(refreshToken ? { refresh_token: refreshToken } : {}),
+            type: 'recovery',
+          },
+        });
+        return;
+      }
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
           await pullRemoteProfileIntoCache();
           const profile = await loadProfile();
@@ -50,6 +79,16 @@ function Inner() {
       sub.remove();
     };
   }, [router]);
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        await pullRemoteProfileIntoCache().catch(() => undefined);
+      }
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const init = async () => {

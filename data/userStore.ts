@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { withUnifiedConditions } from '../lib/healthProfileCoherence';
 
 export interface UserProfile {
   name: string;
@@ -27,17 +28,18 @@ export interface UserProfile {
 const KEY = 'sn_user_profile';
 
 export async function saveProfile(profile: UserProfile): Promise<void> {
-  await AsyncStorage.setItem(KEY, JSON.stringify(profile));
+  const normalized = withUnifiedConditions(profile);
+  await AsyncStorage.setItem(KEY, JSON.stringify(normalized));
   try {
     const { data: sessionData } = await supabase.auth.getSession();
     const uid = sessionData.session?.user?.id;
-    const email = sessionData.session?.user?.email ?? profile.email ?? '';
+    const email = sessionData.session?.user?.email ?? normalized.email ?? '';
     if (!uid) return;
     await supabase.from('profiles').upsert(
       {
         id: uid,
         email: String(email).trim().toLowerCase(),
-        data: profile,
+        data: normalized,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' },
@@ -59,7 +61,7 @@ export async function loadProfile(): Promise<UserProfile | null> {
           .eq('id', uid)
           .maybeSingle();
         if (remote?.data && typeof remote.data === 'object') {
-          const profile = remote.data as UserProfile;
+          const profile = withUnifiedConditions(remote.data as UserProfile);
           await AsyncStorage.setItem(KEY, JSON.stringify(profile));
           return profile;
         }
@@ -69,7 +71,7 @@ export async function loadProfile(): Promise<UserProfile | null> {
     }
     const data = await AsyncStorage.getItem(KEY);
     if (!data) return null;
-    return JSON.parse(data) as UserProfile;
+    return withUnifiedConditions(JSON.parse(data) as UserProfile);
   } catch {
     await AsyncStorage.removeItem(KEY);
     return null;

@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
 import { buildPushTemplate, type PushEventType } from './pushEventTemplates';
 
@@ -37,7 +38,7 @@ async function upsertFcmToken(token: string): Promise<void> {
 export async function setupPushNotifications(
   onNavigate: (payload: PushNavigatePayload) => void
 ): Promise<void> {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || Constants.appOwnership === 'expo') return;
 
   const messaging = (await import('@react-native-firebase/messaging')).default;
 
@@ -92,7 +93,7 @@ export function cleanupPushListeners(): void {
 }
 
 export function registerBackgroundPushHandler(): void {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || Constants.appOwnership === 'expo') return;
   import('@react-native-firebase/messaging')
     .then((module) => {
       const messaging = module.default;

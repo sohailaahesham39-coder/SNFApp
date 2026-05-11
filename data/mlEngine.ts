@@ -102,6 +102,10 @@ export interface KNNInput {
   age: number;
 }
 
+function toSafeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 export interface MealRecommendation {
   mealId: string;
   mealName: string;
@@ -138,13 +142,30 @@ export function knnRecommendMeals(input: KNNInput, k = 3): MealRecommendation[] 
   ];
 
   // get last week data per user
-  const userSummaries = ['USR001','USR002','USR003','USR004','USR005','USR006','USR007','USR008'].map(uid => {
-    const rows = TRAINING_DATA.filter(r => r.user === uid);
-    const last = rows[rows.length - 1];
-    const first = rows[0];
-    const weightLost = first.weight - last.weight;
-    return { uid, goal: last.goal, weight: last.weight, calories: last.calories, weightLost };
-  });
+  const userSummaries = ['USR001','USR002','USR003','USR004','USR005','USR006','USR007','USR008']
+    .map(uid => {
+      const rows = TRAINING_DATA.filter(r => r.user === uid);
+      if (!rows.length) return null;
+      const last = rows[rows.length - 1];
+      const first = rows[0];
+      if (!last || !first) return null;
+      const firstWeight = toSafeNumber((first as { weight?: unknown }).weight, 0);
+      const lastWeight = toSafeNumber((last as { weight?: unknown }).weight, firstWeight);
+      return {
+        uid,
+        goal: typeof (last as { goal?: unknown }).goal === 'string' ? (last as { goal: string }).goal : 'Maintain',
+        weight: lastWeight,
+        calories: toSafeNumber((last as { calories?: unknown }).calories, 1800),
+        weightLost: firstWeight - lastWeight,
+      };
+    })
+    .filter((row): row is {
+      uid: string;
+      goal: string;
+      weight: number;
+      calories: number;
+      weightLost: number;
+    } => row !== null);
 
   // compute distance from each training user
   const distances = userSummaries.map(u => {
@@ -160,6 +181,7 @@ export function knnRecommendMeals(input: KNNInput, k = 3): MealRecommendation[] 
 
   // pick K nearest
   const nearest = distances.sort((a,b) => a.dist - b.dist).slice(0, k);
+  if (!nearest.length) return [];
 
   // score meals based on goal of nearest neighbors
   const goalKey = input.goal === 'Weight Loss' ? 'wl' : input.goal === 'Muscle Gain' ? 'mg' : 'hh';
@@ -169,7 +191,7 @@ export function knnRecommendMeals(input: KNNInput, k = 3): MealRecommendation[] 
     .map(m => ({
       mealId: m.id,
       mealName: m.name,
-      score: m[goalKey as keyof typeof m] as number,
+      score: Number(m[goalKey as keyof typeof m] ?? 0) || 0,
       reason: `Recommended by KNN — ${k} similar users averaged ${avgSuccess.toFixed(1)}kg change`,
       calories: m.cal,
       protein: m.protein,
@@ -378,34 +400,42 @@ export interface MLSummary {
 }
 
 export function runMLEngine(profile: {
-  weight: number;
-  targetCalories: number;
-  goal: string;
-  activity: string;
-  age: number;
-  bmi: number;
-  conditions: string[];
-}): MLSummary {
+  weight?: number;
+  targetCalories?: number;
+  goal?: string;
+  activity?: string;
+  age?: number;
+  bmi?: number;
+  conditions?: string[];
+} | null | undefined): MLSummary {
+  const safeWeight = toSafeNumber(profile?.weight, 70);
+  const safeTargetCalories = toSafeNumber(profile?.targetCalories, 1800);
+  const safeGoal = typeof profile?.goal === 'string' ? profile.goal : 'Maintain';
+  const safeActivity = typeof profile?.activity === 'string' ? profile.activity : 'moderate';
+  const safeAge = toSafeNumber(profile?.age, 30);
+  const safeBmi = toSafeNumber(profile?.bmi, 24);
+  const safeConditions = Array.isArray(profile?.conditions) ? profile.conditions : [];
+
   return {
     knnMeals: knnRecommendMeals({
-      weight: profile.weight,
-      targetCalories: profile.targetCalories,
-      goal: profile.goal,
-      activity: profile.activity,
-      age: profile.age,
+      weight: safeWeight,
+      targetCalories: safeTargetCalories,
+      goal: safeGoal,
+      activity: safeActivity,
+      age: safeAge,
     }),
-    weightPrediction: predictWeightChange(profile.weight, profile.goal, 8),
+    weightPrediction: predictWeightChange(safeWeight, safeGoal, 8),
     dietClassification: classifyDiet({
-      bmi: profile.bmi,
-      conditions: profile.conditions,
-      goal: profile.goal,
-      activity: profile.activity,
-      age: profile.age,
+      bmi: safeBmi,
+      conditions: safeConditions,
+      goal: safeGoal,
+      activity: safeActivity,
+      age: safeAge,
     }),
     weeklyPredictions: linearRegressionPredict({
-      currentWeight: profile.weight,
-      targetCalories: profile.targetCalories,
-      goal: profile.goal,
+      currentWeight: safeWeight,
+      targetCalories: safeTargetCalories,
+      goal: safeGoal,
       weeksWorkout: 8,
     }, 8),
   };
