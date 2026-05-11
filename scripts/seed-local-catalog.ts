@@ -103,16 +103,31 @@ async function upsertChunks<T extends Record<string, unknown>>(
     process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ||
     process.env.SUPABASE_URL?.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const serviceRoleRaw = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = serviceRoleRaw?.trim();
   const missing: string[] = [];
   if (!supabaseUrl) missing.push('EXPO_PUBLIC_SUPABASE_URL (or SUPABASE_URL)');
-  if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (!serviceRoleKey) {
+    if (serviceRoleRaw !== undefined && String(serviceRoleRaw).trim() === '') {
+      missing.push(
+        'SUPABASE_SERVICE_ROLE_KEY (the line exists in .env but the value after = is empty — paste the secret, save the file, run again)'
+      );
+    } else {
+      missing.push('SUPABASE_SERVICE_ROLE_KEY');
+    }
+  }
   if (missing.length) {
+    const paths = [
+      path.resolve(process.cwd(), '.env'),
+      path.join(repoRoot, '.env'),
+    ]
+      .filter((p, i, a) => a.indexOf(p) === i)
+      .join(' or ');
     throw new Error(
-      `Missing in .env (required for catalog upsert): ${missing.join(', ')}.\n` +
-        'Add the service role key from Supabase → Project Settings → API → service_role (secret). ' +
-        'The anon key (EXPO_PUBLIC_SUPABASE_ANON_KEY) cannot replace it.\n' +
-        'Or paste the catalog section from scripts/MASTER-supabase-setup.sql into the Supabase SQL Editor.'
+      `Missing or empty env (required for catalog upsert): ${missing.join(', ')}.\n` +
+        `Expected a line in .env at project root, e.g.: ${paths}\n` +
+        'Use the key labeled service_role from Supabase → Project Settings → API (not the anon key).\n' +
+        'Or run the catalog SQL block in scripts/MASTER-supabase-setup.sql from the Supabase SQL Editor.'
     );
   }
   const admin = createClient(supabaseUrl as string, serviceRoleKey as string);
