@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile } from '../data/userStore';
 import { pullRemoteProfileIntoCache } from '../lib/profileSupabase';
+import { ensureCurrentUserProfile, inferAuthProviderFromUser } from '../lib/authProfileSync';
 import {
   applyLocalNotificationSchedules,
   loadNotificationSettings,
@@ -53,9 +54,31 @@ function Inner() {
         return;
       }
 
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (accessToken && refreshToken && type !== 'recovery') {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
         if (!error) {
+          const { data: u } = await supabase.auth.getUser();
+          if (u.user) {
+            await ensureCurrentUserProfile(inferAuthProviderFromUser(u.user));
+          }
+          await pullRemoteProfileIntoCache();
+          const profile = await loadProfile();
+          if (profile?.name?.trim()) {
+            router.replace('/(tabs)/home');
+          } else {
+            router.replace('/onboarding/step1');
+          }
+        }
+        return;
+      }
+
+      if (code) {
+        const { error, data } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error && data.session?.user) {
+          await ensureCurrentUserProfile(inferAuthProviderFromUser(data.session.user));
           await pullRemoteProfileIntoCache();
           const profile = await loadProfile();
           if (profile?.name?.trim()) {

@@ -1,6 +1,16 @@
+import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
 export type AuthProviderType = 'email' | 'google' | 'apple';
+
+/** OAuth users often have a non-email identity first (google/apple). */
+export function inferAuthProviderFromUser(user: User | null): AuthProviderType {
+  if (!user?.identities?.length) return 'email';
+  const oauth = user.identities.find((i) => i.provider !== 'email');
+  if (oauth?.provider === 'google') return 'google';
+  if (oauth?.provider === 'apple') return 'apple';
+  return 'email';
+}
 
 export type PublicProfileRow = {
   id: string;
