@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
+import { getOAuthRedirectUri } from '../../lib/oauth';
 import { isValidEmail } from '../../lib/authValidation';
 import { mapAuthErrorToArabic } from '../../lib/authErrors';
 
@@ -12,8 +12,6 @@ export default function ForgotPassword() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  const redirectTo = useMemo(() => Linking.createURL('auth/callback'), []);
 
   async function onSend() {
     const normalizedEmail = email.trim().toLowerCase();
@@ -31,7 +29,7 @@ export default function ForgotPassword() {
     setBusy(true);
     try {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-        redirectTo,
+        redirectTo: getOAuthRedirectUri(),
       });
       if (resetError) {
         setError(mapAuthErrorToArabic(resetError.message || 'Unable to send reset email.'));

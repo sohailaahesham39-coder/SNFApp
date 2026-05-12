@@ -41,16 +41,19 @@ function Inner() {
       const accessToken = query.access_token ?? hash.access_token;
       const refreshToken = query.refresh_token ?? hash.refresh_token;
 
+      /** Recovery: establish session here so reset-password does not rely on huge tokens in router params (blank screen / dropped params). */
       if (type === 'recovery' && (code || (accessToken && refreshToken))) {
-        router.replace({
-          pathname: '/(auth)/reset-password',
-          params: {
-            ...(code ? { code } : {}),
-            ...(accessToken ? { access_token: accessToken } : {}),
-            ...(refreshToken ? { refresh_token: refreshToken } : {}),
-            type: 'recovery',
-          },
-        });
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) return;
+        } else if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) return;
+        }
+        router.replace('/(auth)/reset-password');
         return;
       }
 
@@ -91,11 +94,11 @@ function Inner() {
     }
 
     Linking.getInitialURL().then((url) => {
-      if (url) handleAuthCallback(url).catch(() => {});
+      if (url) void handleAuthCallback(url);
     });
 
     const sub = Linking.addEventListener('url', ({ url }) => {
-      handleAuthCallback(url).catch(() => {});
+      void handleAuthCallback(url);
     });
 
     return () => {

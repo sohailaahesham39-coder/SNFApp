@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
@@ -8,8 +8,7 @@ import { supabase } from '../../lib/supabase';
 function parseHashParams(url: string): Record<string, string> {
   const hashIndex = url.indexOf('#');
   if (hashIndex === -1) return {};
-  const hash = url.slice(hashIndex + 1);
-  const params = new URLSearchParams(hash);
+  const params = new URLSearchParams(url.slice(hashIndex + 1));
   const out: Record<string, string> = {};
   params.forEach((value, key) => {
     out[key] = value;
@@ -17,91 +16,72 @@ function parseHashParams(url: string): Record<string, string> {
   return out;
 }
 
-function parseResetParams(url: string | null): { accessToken?: string; refreshToken?: string; type?: string; code?: string } {
-  if (!url) return {};
+/** Fallback if deep link opened this screen before root layout finished (session not set yet). */
+async function tryEstablishSessionFromUrl(): Promise<boolean> {
+  const url = await Linking.getInitialURL();
+  if (!url || !url.includes('auth/callback')) return false;
   const parsed = Linking.parse(url);
   const params = (parsed.queryParams ?? {}) as Record<string, string | undefined>;
   const hashParams = parseHashParams(url);
-  return {
-    accessToken: params.access_token ?? hashParams.access_token,
-    refreshToken: params.refresh_token ?? hashParams.refresh_token,
-    type: params.type ?? hashParams.type,
-    code: params.code ?? hashParams.code,
-  };
+  const code = params.code ?? hashParams.code;
+  const type = params.type ?? hashParams.type;
+  const accessToken = params.access_token ?? hashParams.access_token;
+  const refreshToken = params.refresh_token ?? hashParams.refresh_token;
+
+  if (type !== 'recovery') return false;
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    return !error;
+  }
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    return !error;
+  }
+  return false;
 }
 
 export default function ResetPassword() {
-  const localParams = useLocalSearchParams<{
-    access_token?: string;
-    refresh_token?: string;
-    type?: string;
-    code?: string;
-  }>();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [ready, setReady] = useState(false);
-
-  const [sessionParams, setSessionParams] = useState<{ accessToken?: string; refreshToken?: string; type?: string; code?: string }>({});
-
-  const helpText = useMemo(() => {
-    if (!ready) return 'جارٍ تحميل رابط الاستعادة...';
-    if (!sessionParams.accessToken && !sessionParams.code) {
-      return 'رابط الاستعادة غير مكتمل. من فضلك اطلب رابطًا جديدًا.';
-    }
-    if (sessionParams.type && sessionParams.type !== 'recovery') {
-      return 'هذا الرابط ليس رابط استعادة كلمة المرور.';
-    }
-    return '';
-  }, [ready, sessionParams.accessToken, sessionParams.code, sessionParams.type]);
+  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      try {
-        const initialUrl = await Linking.getInitialURL();
-        const initial = parseResetParams(initialUrl);
-        if (mounted) setSessionParams(initial);
-
-        // Also listen for the case where the app was already open.
-        const sub = Linking.addEventListener('url', ({ url }) => {
-          const p = parseResetParams(url);
-          setSessionParams(p);
-        });
-
-        return () => sub.remove();
-      } finally {
-        if (mounted) setReady(true);
+    let cancelled = false;
+    (async () => {
+      const { data: s1 } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (s1.session) {
+        setHasSession(true);
+        setReady(true);
+        return;
       }
-    }
-
-    const cleanupPromise = init();
-
+      const ok = await tryEstablishSessionFromUrl();
+      if (cancelled) return;
+      if (ok) {
+        const { data: s2 } = await supabase.auth.getSession();
+        setHasSession(!!s2.session);
+      }
+      setReady(true);
+    })();
     return () => {
-      mounted = false;
-      cleanupPromise.then((cleanup) => cleanup?.()).catch(() => {});
+      cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!localParams) return;
-    setSessionParams((prev) => ({
-      accessToken: (localParams.access_token as string | undefined) ?? prev.accessToken,
-      refreshToken: (localParams.refresh_token as string | undefined) ?? prev.refreshToken,
-      type: (localParams.type as string | undefined) ?? prev.type,
-      code: (localParams.code as string | undefined) ?? prev.code,
-    }));
-  }, [localParams.access_token, localParams.refresh_token, localParams.type, localParams.code]);
 
   async function onUpdate() {
     setError('');
     setSuccess('');
 
-    if (!sessionParams.accessToken && !sessionParams.code) {
-      setError('رابط الاستعادة غير صالح. اطلب رابطًا جديدًا.');
+    if (!hasSession) {
+      setError('انتهت صلاحية الرابط. اطلب رابط استعادة جديد من شاشة نسيت كلمة المرور.');
       return;
     }
 
@@ -116,24 +96,6 @@ export default function ResetPassword() {
 
     setBusy(true);
     try {
-      // Establish a session from the recovery tokens, then update password.
-      if (sessionParams.accessToken && sessionParams.refreshToken) {
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: sessionParams.accessToken,
-          refresh_token: sessionParams.refreshToken,
-        });
-        if (sessionError) {
-          setError(sessionError.message || 'تعذر التحقق من رابط الاستعادة.');
-          return;
-        }
-      } else if (sessionParams.code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(sessionParams.code);
-        if (exchangeError) {
-          setError(exchangeError.message || 'تعذر التحقق من رابط الاستعادة.');
-          return;
-        }
-      }
-
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         setError(updateError.message || 'تعذر تحديث كلمة المرور.');
@@ -149,11 +111,7 @@ export default function ResetPassword() {
     }
   }
 
-  const canSubmit =
-    ready &&
-    !busy &&
-    (!!sessionParams.code || (!!sessionParams.accessToken && !!sessionParams.refreshToken)) &&
-    (sessionParams.type ? sessionParams.type === 'recovery' : true);
+  const canSubmit = ready && hasSession && !busy;
 
   return (
     <View style={s.container}>
@@ -163,7 +121,12 @@ export default function ResetPassword() {
           <Text style={s.title}>تعيين كلمة مرور جديدة</Text>
           <Text style={s.sub}>أدخل كلمة المرور الجديدة.</Text>
 
-          {!!helpText && <Text style={s.hint}>{helpText}</Text>}
+          {ready && !hasSession && (
+            <Text style={s.hint}>
+              لم يتم التحقق من الرابط. افتح الرابط من الإيميل على نفس الجهاز الذي فيه التطبيق، أو اطلب رابطًا جديدًا.
+            </Text>
+          )}
+          {!ready && <Text style={s.hint}>جارٍ التحقق من الرابط...</Text>}
           {!!error && <Text style={s.err}>{error}</Text>}
           {!!success && <Text style={s.ok}>{success}</Text>}
 
@@ -205,7 +168,7 @@ const s = StyleSheet.create({
   scroll: { padding: 24, paddingTop: 70, flexGrow: 1 },
   title: { fontSize: 24, fontWeight: '900', color: '#fff', marginBottom: 8 },
   sub: { fontSize: 14, color: '#888', marginBottom: 16 },
-  hint: { color: '#777', fontSize: 13, marginBottom: 10 },
+  hint: { color: '#aaa', fontSize: 13, marginBottom: 12, lineHeight: 20 },
   lbl: { fontSize: 13, fontWeight: '600', color: '#ccc', marginBottom: 8 },
   input: {
     backgroundColor: '#1a1a1a',
@@ -223,4 +186,3 @@ const s = StyleSheet.create({
   btnT: { fontSize: 16, fontWeight: '800', color: '#000' },
   back: { textAlign: 'center', color: '#888', fontSize: 14 },
 });
-
