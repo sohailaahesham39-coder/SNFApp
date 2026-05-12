@@ -6,8 +6,14 @@ export function mapAuthErrorToArabic(message: string): string {
   if (m.includes('user already registered') || m.includes('already') || m.includes('exists')) {
     return 'هذا الإيميل مسجل بالفعل. جرّب تسجيل الدخول.';
   }
-  if (m.includes('rate limit') || m.includes('too many requests')) {
-    return 'تم تجاوز عدد المحاولات مؤقتًا. انتظر قليلًا ثم حاول مرة أخرى.';
+  if (
+    m.includes('rate limit') ||
+    m.includes('too many requests') ||
+    m.includes('email rate') ||
+    m.includes('emails per hour') ||
+    (m.includes('limit') && m.includes('email'))
+  ) {
+    return 'وصلت حدود إرسال الإيميل من Supabase (الخدمة المجانية محدودة). انتظر ساعة أو فعّل Custom SMTP من لوحة Supabase (Authentication → SMTP Settings)، أو عطّل التحقق بالإيميل مؤقتًا للتجربة.';
   }
   if (m.includes('network') || m.includes('failed to fetch')) {
     return 'مشكلة في الاتصال بالإنترنت. تأكد من الشبكة ثم حاول مرة أخرى.';
